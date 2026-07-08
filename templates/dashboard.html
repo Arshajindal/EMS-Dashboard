@@ -68,7 +68,7 @@
   border-radius: 6px 6px 0 0;
 }
 .tab-btn:hover  { color: var(--text); background: var(--card-bg); }
-.tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+.tab-btn.active { color: var(--accent-text); border-bottom-color: var(--gold); }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
@@ -142,15 +142,15 @@ th {
   cursor: pointer;
   user-select: none;
 }
-th:hover { color: var(--gold); }
+th:hover { color: var(--accent-text); }
 td {
   padding: .6rem .8rem;
   border-bottom: 1px solid var(--card-border);
   color: var(--text);
   white-space: nowrap;
 }
-tr:hover td { background: rgba(255,255,255,.03); }
-.money { color: var(--gold); font-weight: 600; }
+tr:hover td { background: var(--hover-bg); }
+.money { color: var(--accent-text); font-weight: 600; }
 .money-red { color: var(--danger); }
 .badge {
   display: inline-block;
@@ -159,7 +159,7 @@ tr:hover td { background: rgba(255,255,255,.03); }
 }
 .badge-green   { background: rgba(46,204,113,.2); color: var(--success); }
 .badge-yellow  { background: rgba(243,156,18,.2); color: var(--warning); }
-.badge-gray    { background: rgba(255,255,255,.1); color: var(--text-muted); }
+.badge-gray    { background: var(--overlay-bg); color: var(--text-muted); }
 
 /* Pagination */
 .pagination {
@@ -175,8 +175,8 @@ tr:hover td { background: rgba(255,255,255,.03); }
   cursor: pointer; font-size: .8rem;
   transition: all .15s;
 }
-.pagination button:hover    { border-color: var(--gold); color: var(--gold); }
-.pagination button.current  { background: var(--gold); color: var(--gray-900); border-color: var(--gold); font-weight: 700; }
+.pagination button:hover    { border-color: var(--gold); color: var(--accent-text); }
+.pagination button.current  { background: var(--gold); color: var(--on-gold); border-color: var(--gold); font-weight: 700; }
 .pagination button:disabled { opacity: .4; cursor: not-allowed; }
 .pag-info { font-size: .78rem; color: var(--text-muted); margin-right: auto; }
 
@@ -218,7 +218,7 @@ tr:hover td { background: rgba(255,255,255,.03); }
   display: inline-block;
   padding: 2px 8px; border-radius: 4px;
   font-size: .7rem; font-weight: 600;
-  background: rgba(255,198,39,.15); color: var(--gold);
+  background: rgba(255,198,39,.15); color: var(--accent-text);
 }
 
 /* ── Validation stats row ───────────────────────────────────────── */
@@ -469,17 +469,34 @@ let currentPage = 1;
 let searchTimer = null;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Chart.js global defaults
+// Chart.js global defaults (theme-aware — Chart.js bakes colors into each
+// chart instance at creation time, so these need to be re-applied and every
+// chart re-created whenever the theme toggles; see themechange listener below)
 // ─────────────────────────────────────────────────────────────────────────────
-Chart.defaults.color          = '#9ab0cc';
-Chart.defaults.borderColor    = '#253a60';
-Chart.defaults.font.family    = 'Inter';
-Chart.defaults.font.size      = 11;
-Chart.defaults.plugins.legend.labels.boxWidth = 12;
-Chart.defaults.plugins.tooltip.backgroundColor = '#1a2744';
-Chart.defaults.plugins.tooltip.borderColor     = '#253a60';
-Chart.defaults.plugins.tooltip.borderWidth     = 1;
-Chart.defaults.plugins.tooltip.padding         = 10;
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function gridColor() {
+  return cssVar('--grid-line');
+}
+function setChartDefaults() {
+  Chart.defaults.color          = cssVar('--text-muted');
+  Chart.defaults.borderColor    = cssVar('--card-border');
+  Chart.defaults.font.family    = 'Inter';
+  Chart.defaults.font.size      = 11;
+  Chart.defaults.plugins.legend.labels.boxWidth = 12;
+  Chart.defaults.plugins.tooltip.backgroundColor = cssVar('--card-bg');
+  Chart.defaults.plugins.tooltip.borderColor     = cssVar('--card-border');
+  Chart.defaults.plugins.tooltip.borderWidth     = 1;
+  Chart.defaults.plugins.tooltip.padding         = 10;
+}
+function destroyAllCharts() {
+  document.querySelectorAll('canvas').forEach(c => {
+    const existing = Chart.getChart(c);
+    if (existing) existing.destroy();
+  });
+}
+setChartDefaults();
 
 const PALETTE = [
   '#FFC627','#3498db','#2ecc71','#9b59b6','#e74c3c',
@@ -654,7 +671,7 @@ function renderMonthlyRevenue(d) {
       scales: {
         y: {
           ticks: { callback: v => fmt$(v) },
-          grid: { color: 'rgba(255,255,255,.05)' },
+          grid: { color: gridColor() },
         },
         x: { grid: { display: false } },
       },
@@ -680,7 +697,7 @@ function renderQuarterly(d) {
       responsive: true, maintainAspectRatio: false,
       plugins: { tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) }}},
       scales: {
-        y: { ticks: { callback: v => fmt$(v) }, grid: { color: 'rgba(255,255,255,.05)' } },
+        y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
         x: { grid: { display: false } },
       },
     },
@@ -704,7 +721,7 @@ function renderVolume(d) {
     options: {
       responsive: true, maintainAspectRatio: false,
       scales: {
-        y: { grid: { color: 'rgba(255,255,255,.05)' } },
+        y: { grid: { color: gridColor() } },
         x: { grid: { display: false } },
       },
     },
@@ -729,7 +746,7 @@ function renderSegmentDoughnut(canvasId, labels, values) {
       datasets: [{
         data: values,
         backgroundColor: colors,
-        borderColor: '#1a2744',
+        borderColor: cssVar('--card-bg'),
         borderWidth: 2,
       }],
     },
@@ -793,13 +810,13 @@ function renderHostTypes(detail) {
       labels,
       datasets: [
         { label: 'Gross Sales', data: grossVals, backgroundColor: PALETTE.slice(0,4), borderWidth: 0, yAxisID: 'y' },
-        { label: 'Setup Count', data: setupVals, backgroundColor: 'rgba(255,255,255,.15)', borderWidth: 0, yAxisID: 'y2', type: 'line', borderColor: '#fff', pointRadius: 5, tension: 0 },
+        { label: 'Setup Count', data: setupVals, backgroundColor: cssVar('--text'), borderWidth: 0, yAxisID: 'y2', type: 'line', borderColor: cssVar('--text'), pointRadius: 5, tension: 0 },
       ],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       scales: {
-        y:  { position: 'left',  ticks: { callback: v => fmt$(v) }, grid: { color: 'rgba(255,255,255,.05)' } },
+        y:  { position: 'left',  ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
         y2: { position: 'right', ticks: { callback: v => v.toLocaleString() }, grid: { display: false } },
         x:  { grid: { display: false } },
       },
@@ -827,7 +844,7 @@ function renderRooms(d) {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        x: { grid: { color: 'rgba(255,255,255,.05)' } },
+        x: { grid: { color: gridColor() } },
         y: { grid: { display: false }, ticks: { font: { size: 10 } } },
       },
     },
@@ -843,7 +860,7 @@ function renderStatus(d) {
     type: 'pie',
     data: {
       labels: d.labels,
-      datasets: [{ data: d.counts, backgroundColor: PALETTE, borderColor: '#1a2744', borderWidth: 2 }],
+      datasets: [{ data: d.counts, backgroundColor: PALETTE, borderColor: cssVar('--card-bg'), borderWidth: 2 }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -867,7 +884,7 @@ function renderWeekday(d) {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' Avg: ' + fmt$(ctx.raw) }}},
       scales: {
-        y: { ticks: { callback: v => fmt$(v) }, grid: { color: 'rgba(255,255,255,.05)' } },
+        y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
         x: { grid: { display: false } },
       },
     },
@@ -889,7 +906,7 @@ function renderDuration(d) {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        y: { grid: { color: 'rgba(255,255,255,.05)' } },
+        y: { grid: { color: gridColor() } },
         x: { grid: { display: false } },
       },
     },
@@ -919,7 +936,7 @@ function renderHeatmap(d) {
           const alpha = maxV ? (v / maxV) : 0;
           return `rgba(255,198,39,${0.08 + alpha * 0.88})`;
         },
-        borderColor: '#1a2744',
+        borderColor: cssVar('--card-bg'),
         borderWidth: 1,
         width:  ({ chart }) => (chart.chartArea || {}).width  / d.hours.length - 2,
         height: ({ chart }) => (chart.chartArea || {}).height / d.days.length  - 2,
@@ -957,7 +974,7 @@ function renderPayment(d) {
       responsive: true, maintainAspectRatio: false,
       plugins: { tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) }}},
       scales: {
-        y: { ticks: { callback: v => fmt$(v) }, grid: { color: 'rgba(255,255,255,.05)' } },
+        y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
         x: { grid: { display: false } },
       },
     },
@@ -980,7 +997,7 @@ function renderDiscounts(d) {
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + fmt$(ctx.raw) }}},
-        scales: { y: { ticks: { callback: v => fmt$(v) }, grid: { color: 'rgba(255,255,255,.05)' } }, x: { grid: { display: false } } },
+        scales: { y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } }, x: { grid: { display: false } } },
       },
     });
     new Chart(document.getElementById('chartDiscPct'), {
@@ -992,7 +1009,7 @@ function renderDiscounts(d) {
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.raw.toFixed(1) + '%' }}},
-        scales: { y: { ticks: { callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,.05)' } }, x: { grid: { display: false } } },
+        scales: { y: { ticks: { callback: v => v + '%' }, grid: { color: gridColor() } }, x: { grid: { display: false } } },
       },
     });
   }
@@ -1104,6 +1121,16 @@ function renderValidation(v) {
     ` : '<p style="color:var(--success);margin-top:1rem;font-size:.85rem;">✅ No validation warnings.</p>'}
   `;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Re-render charts on theme toggle (Chart.js bakes colors in at creation time)
+// ─────────────────────────────────────────────────────────────────────────────
+document.addEventListener('themechange', () => {
+  if (!dashData) return;
+  destroyAllCharts();
+  setChartDefaults();
+  renderAll(dashData);
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Init
