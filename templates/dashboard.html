@@ -1,0 +1,1113 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block head_extra %}
+<style>
+/* ── KPI Cards ──────────────────────────────────────────────────── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+.kpi-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  position: relative;
+  overflow: hidden;
+  transition: transform .15s, box-shadow .15s;
+}
+.kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.kpi-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0;
+  width: 4px; height: 100%;
+}
+.kpi-card.gold::before  { background: var(--gold); }
+.kpi-card.blue::before  { background: var(--info); }
+.kpi-card.green::before { background: var(--success); }
+.kpi-card.red::before   { background: var(--danger); }
+.kpi-card.purple::before{ background: #9b59b6; }
+.kpi-card.maroon::before{ background: var(--maroon); }
+
+.kpi-label {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--text-muted);
+  margin-bottom: .4rem;
+}
+.kpi-value {
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+.kpi-sub {
+  font-size: .75rem;
+  color: var(--text-muted);
+  margin-top: .4rem;
+}
+
+/* ── Tabs ──────────────────────────────────────────────────────── */
+.tab-bar {
+  display: flex; gap: .5rem; flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--card-border);
+  padding-bottom: .5rem;
+}
+.tab-btn {
+  background: transparent;
+  border: none; border-bottom: 3px solid transparent;
+  color: var(--text-muted);
+  padding: .5rem 1.1rem;
+  cursor: pointer; font-size: .85rem; font-weight: 500;
+  transition: all .2s;
+  border-radius: 6px 6px 0 0;
+}
+.tab-btn:hover  { color: var(--text); background: var(--card-bg); }
+.tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── Chart Grid ────────────────────────────────────────────────── */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.chart-grid.single { grid-template-columns: 1fr; }
+.chart-grid.thirds { grid-template-columns: repeat(3, 1fr); }
+
+.chart-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+}
+.chart-card h3 {
+  font-size: .88rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  margin-bottom: 1.2rem;
+}
+.chart-wrap { position: relative; height: 300px; }
+.chart-wrap.tall  { height: 380px; }
+.chart-wrap.short { height: 220px; }
+
+/* ── Table ──────────────────────────────────────────────────────── */
+.table-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  margin-top: 1.25rem;
+}
+.table-toolbar {
+  display: flex; gap: .75rem; flex-wrap: wrap;
+  margin-bottom: 1rem;
+  align-items: center;
+}
+.table-toolbar input, .table-toolbar select {
+  background: var(--gray-700);
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: .5rem .85rem;
+  font-size: .82rem;
+  flex: 1; min-width: 160px;
+}
+.table-toolbar input:focus, .table-toolbar select:focus {
+  outline: none; border-color: var(--gold);
+}
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%; border-collapse: collapse;
+  font-size: .82rem;
+}
+th {
+  text-align: left; padding: .65rem .8rem;
+  background: var(--gray-700);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+th:hover { color: var(--gold); }
+td {
+  padding: .6rem .8rem;
+  border-bottom: 1px solid var(--card-border);
+  color: var(--text);
+  white-space: nowrap;
+}
+tr:hover td { background: rgba(255,255,255,.03); }
+.money { color: var(--gold); font-weight: 600; }
+.money-red { color: var(--danger); }
+.badge {
+  display: inline-block;
+  padding: 2px 8px; border-radius: 4px;
+  font-size: .7rem; font-weight: 600;
+}
+.badge-green   { background: rgba(46,204,113,.2); color: var(--success); }
+.badge-yellow  { background: rgba(243,156,18,.2); color: var(--warning); }
+.badge-gray    { background: rgba(255,255,255,.1); color: var(--text-muted); }
+
+/* Pagination */
+.pagination {
+  display: flex; align-items: center; gap: .5rem;
+  margin-top: 1rem; justify-content: flex-end;
+}
+.pagination button {
+  background: var(--gray-700);
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  cursor: pointer; font-size: .8rem;
+  transition: all .15s;
+}
+.pagination button:hover    { border-color: var(--gold); color: var(--gold); }
+.pagination button.current  { background: var(--gold); color: var(--gray-900); border-color: var(--gold); font-weight: 700; }
+.pagination button:disabled { opacity: .4; cursor: not-allowed; }
+.pag-info { font-size: .78rem; color: var(--text-muted); margin-right: auto; }
+
+/* ── Validation Banner ──────────────────────────────────────────── */
+.warn-banner {
+  background: rgba(243,156,18,.12);
+  border: 1px solid rgba(243,156,18,.35);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  font-size: .82rem;
+}
+.warn-banner strong { color: var(--warning); }
+.warn-banner ul { padding-left: 1rem; margin-top: .4rem; color: var(--text-muted); }
+
+/* ── Ranked table (top hosts) ───────────────────────────────────── */
+.rank-table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+.rank-table th {
+  text-align: left; padding: .5rem;
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--text-muted); border-bottom: 1px solid var(--card-border);
+}
+.rank-table tr { border-bottom: 1px solid var(--card-border); }
+.rank-table td { padding: .6rem .5rem; }
+.rank-num { width: 28px; color: var(--text-muted); font-weight: 700; }
+.rank-bar-wrap {
+  background: var(--gray-700);
+  border-radius: 99px;
+  height: 6px; width: 100%;
+}
+.rank-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--maroon));
+  border-radius: 99px;
+}
+
+/* ── Segment badges ─────────────────────────────────────────────── */
+.seg-tag {
+  display: inline-block;
+  padding: 2px 8px; border-radius: 4px;
+  font-size: .7rem; font-weight: 600;
+  background: rgba(255,198,39,.15); color: var(--gold);
+}
+
+/* ── Validation stats row ───────────────────────────────────────── */
+.val-grid {
+  display: flex; flex-wrap: wrap; gap: .75rem;
+  margin-top: .75rem;
+}
+.val-item {
+  background: var(--gray-700);
+  border-radius: 8px; padding: .5rem .9rem;
+  font-size: .78rem;
+}
+.val-item strong { color: var(--text); }
+.val-item span   { color: var(--text-muted); display: block; font-size: .7rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Source files info ───────────────────────────────────────────────── -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.5rem;">
+  <div>
+    <h2 style="font-size:1.2rem;font-weight:700;">Sales Analytics</h2>
+    <p style="color:var(--text-muted);font-size:.8rem;" id="period-label">Loading…</p>
+  </div>
+  <div style="font-size:.75rem;color:var(--text-muted);">
+    {% for f in source_files %}<span style="background:var(--gray-700);padding:3px 8px;border-radius:4px;margin-left:.4rem;">{{ f }}</span>{% endfor %}
+  </div>
+</div>
+
+<!-- ── Validation Warning Banner ──────────────────────────────────────── -->
+<div id="warnBanner" class="warn-banner" style="display:none;">
+  <strong>⚠ Data Quality Notices</strong>
+  <ul id="warnList"></ul>
+</div>
+
+<!-- ── KPI Cards ──────────────────────────────────────────────────────── -->
+<div class="kpi-grid" id="kpiGrid">
+  <div class="kpi-card gold"><div class="kpi-label">Gross Sales</div><div class="kpi-value" id="k-gross">—</div><div class="kpi-sub">Total FY revenue</div></div>
+  <div class="kpi-card blue"><div class="kpi-label">Net Sales</div><div class="kpi-value" id="k-net">—</div><div class="kpi-sub">After discounts</div></div>
+  <div class="kpi-card red"><div class="kpi-label">Total Discount</div><div class="kpi-value" id="k-discount">—</div><div class="kpi-sub" id="k-discount-pct">—</div></div>
+  <div class="kpi-card green"><div class="kpi-label">Total Events</div><div class="kpi-value" id="k-events">—</div><div class="kpi-sub" id="k-paid-events">—</div></div>
+  <div class="kpi-card purple"><div class="kpi-label">Unique Clients</div><div class="kpi-value" id="k-hosts">—</div><div class="kpi-sub">Distinct host accounts</div></div>
+  <div class="kpi-card maroon"><div class="kpi-label">Avg. Event Revenue</div><div class="kpi-value" id="k-avg">—</div><div class="kpi-sub">Gross per paid booking</div></div>
+  <div class="kpi-card blue"><div class="kpi-label">Room Hours</div><div class="kpi-value" id="k-hours">—</div><div class="kpi-sub" id="k-avg-hrs">—</div></div>
+  <div class="kpi-card gold"><div class="kpi-label">Monthly Avg Revenue</div><div class="kpi-value" id="k-monthly">—</div><div class="kpi-sub" id="k-months">—</div></div>
+</div>
+
+<!-- ── Tabs ───────────────────────────────────────────────────────────── -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('revenue')">📈 Revenue Trends</button>
+  <button class="tab-btn" onclick="switchTab('clients')">🏢 Clients &amp; Segments</button>
+  <button class="tab-btn" onclick="switchTab('operations')">⚙️ Operations</button>
+  <button class="tab-btn" onclick="switchTab('discounts')">💰 Discounts</button>
+  <button class="tab-btn" onclick="switchTab('bookings')">📋 Bookings Table</button>
+  <button class="tab-btn" onclick="switchTab('validation')">🔍 Data Quality</button>
+</div>
+
+<!-- ══ TAB: Revenue ════════════════════════════════════════════════════ -->
+<div class="tab-panel active" id="tab-revenue">
+  <div class="chart-grid single">
+    <div class="chart-card">
+      <h3>Monthly Gross vs Net Sales</h3>
+      <div class="chart-wrap tall"><canvas id="chartMonthlyRevenue"></canvas></div>
+    </div>
+  </div>
+  <div class="chart-grid">
+    <div class="chart-card">
+      <h3>Fiscal Quarterly Performance</h3>
+      <div class="chart-wrap"><canvas id="chartQuarterly"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Monthly Booking Volume</h3>
+      <div class="chart-wrap"><canvas id="chartVolume"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TAB: Clients & Segments ════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-clients">
+  <div class="chart-grid">
+    <div class="chart-card">
+      <h3>Gross Sales by Client Segment</h3>
+      <div class="chart-wrap"><canvas id="chartSegmentGross"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Net Sales by Client Segment</h3>
+      <div class="chart-wrap"><canvas id="chartSegmentNet"></canvas></div>
+    </div>
+  </div>
+  <div class="chart-grid single">
+    <div class="chart-card">
+      <h3>Top 15 Clients by Revenue</h3>
+      <div style="max-height:400px;overflow-y:auto;">
+        <table class="rank-table" id="topHostsTable">
+          <thead>
+            <tr>
+              <th style="width:36px"></th>
+              <th>Client</th>
+              <th style="width:120px">Share</th>
+              <th style="text-align:right">Gross</th>
+              <th style="text-align:right">Net</th>
+            </tr>
+          </thead>
+          <tbody id="topHostsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="chart-grid single">
+    <div class="chart-card">
+      <h3>Host Type Breakdown — Gross Sales &amp; Setup Count</h3>
+      <div class="chart-wrap"><canvas id="chartHostTypes"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TAB: Operations ════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-operations">
+  <div class="chart-grid">
+    <div class="chart-card">
+      <h3>Top 20 Rooms by Booking Count</h3>
+      <div class="chart-wrap tall"><canvas id="chartRooms"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Booking Status Distribution</h3>
+      <div class="chart-wrap"><canvas id="chartStatus"></canvas></div>
+    </div>
+  </div>
+  <div class="chart-grid">
+    <div class="chart-card">
+      <h3>Average Revenue by Day of Week</h3>
+      <div class="chart-wrap"><canvas id="chartWeekday"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Event Duration Distribution</h3>
+      <div class="chart-wrap"><canvas id="chartDuration"></canvas></div>
+    </div>
+  </div>
+  <div class="chart-grid single">
+    <div class="chart-card">
+      <h3>Booking Activity Heatmap (Day × Hour)</h3>
+      <div class="chart-wrap tall"><canvas id="chartHeatmap"></canvas></div>
+    </div>
+  </div>
+  <div class="chart-grid single">
+    <div class="chart-card">
+      <h3>Revenue by Payment / Billing Type</h3>
+      <div class="chart-wrap"><canvas id="chartPayment"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TAB: Discounts ═════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-discounts">
+  <div class="chart-grid">
+    <div class="chart-card">
+      <h3>Total Discount by Client Segment</h3>
+      <div class="chart-wrap"><canvas id="chartDiscSeg"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Avg Discount % by Segment</h3>
+      <div class="chart-wrap"><canvas id="chartDiscPct"></canvas></div>
+    </div>
+  </div>
+  <div class="chart-grid single">
+    <div class="chart-card">
+      <h3>Top 10 Most Discounted Clients</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Client</th><th>Gross</th><th>Net</th><th>Discount</th><th>Avg Disc %</th>
+          </tr></thead>
+          <tbody id="discTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TAB: Bookings Table ════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-bookings">
+  <div class="table-card">
+    <div class="table-toolbar">
+      <input type="text" id="searchInput" placeholder="Search host, event, room…" oninput="debounceSearch()"/>
+      <select id="segFilter" onchange="loadBookings(1)">
+        <option value="">All Segments</option>
+        <option value="ASU">ASU</option>
+        <option value="Public">Public</option>
+        <option value="SkySong Affliate">SkySong Affiliate</option>
+        <option value="SkySong Tenants">SkySong Tenants</option>
+        <option value="Government">Government</option>
+        <option value="Education">Education</option>
+        <option value="Healthcare">Healthcare</option>
+        <option value="Technology">Technology</option>
+        <option value="Non-Profit / Association">Non-Profit</option>
+        <option value="Commercial / Other">Commercial</option>
+      </select>
+      <select id="statusFilter" onchange="loadBookings(1)">
+        <option value="">All Statuses</option>
+        <option value="Reserved">Reserved</option>
+        <option value="Tentative">Tentative</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortBy('start')">Date ↕</th>
+            <th onclick="sortBy('host')">Client ↕</th>
+            <th>Event</th>
+            <th>Room</th>
+            <th>Hrs</th>
+            <th>Status</th>
+            <th>Segment</th>
+            <th onclick="sortBy('Gross Sales')">Gross ↕</th>
+            <th onclick="sortBy('Net Sales')">Net ↕</th>
+            <th>Disc</th>
+          </tr>
+        </thead>
+        <tbody id="bookingsBody"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="pagination">
+      <span class="pag-info" id="pagInfo"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TAB: Data Quality ══════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-validation">
+  <div class="chart-card">
+    <h3>Parse &amp; Validation Report</h3>
+    <div id="valReport"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Global state
+// ─────────────────────────────────────────────────────────────────────────────
+let dashData = null;
+let tableSort = { col: 'start', order: 'asc' };
+let currentPage = 1;
+let searchTimer = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chart.js global defaults
+// ─────────────────────────────────────────────────────────────────────────────
+Chart.defaults.color          = '#9ab0cc';
+Chart.defaults.borderColor    = '#253a60';
+Chart.defaults.font.family    = 'Inter';
+Chart.defaults.font.size      = 11;
+Chart.defaults.plugins.legend.labels.boxWidth = 12;
+Chart.defaults.plugins.tooltip.backgroundColor = '#1a2744';
+Chart.defaults.plugins.tooltip.borderColor     = '#253a60';
+Chart.defaults.plugins.tooltip.borderWidth     = 1;
+Chart.defaults.plugins.tooltip.padding         = 10;
+
+const PALETTE = [
+  '#FFC627','#3498db','#2ecc71','#9b59b6','#e74c3c',
+  '#f39c12','#1abc9c','#e67e22','#8C1D40','#00b894',
+  '#0984e3','#6c5ce7','#fdcb6e','#55efc4','#fab1a0',
+];
+
+// Fixed color per segment name so the SAME segment is the SAME color
+// across both the Gross and Net doughnuts (and any other chart that
+// breaks down by segment). Falls back to PALETTE by index for any
+// segment name not listed here (e.g. a new host_type value later).
+const SEGMENT_COLORS = {
+  'ASU':                      '#FFC627',
+  'Public':                   '#3498db',
+  'SkySong Affliate':         '#2ecc71',
+  'SkySong Tenants':          '#9b59b6',
+  'Commercial / Other':       '#95a5a6',
+  'Government':               '#e74c3c',
+  'Education':                '#1abc9c',
+  'Healthcare':               '#e67e22',
+  'Technology':               '#00b894',
+  'Non-Profit / Association': '#6c5ce7',
+};
+function segmentColor(label, idx) {
+  return SEGMENT_COLORS[label] || PALETTE[idx % PALETTE.length];
+}
+
+function fmt$(v) {
+  if (v == null) return '—';
+  return '$' + Number(v).toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0});
+}
+function fmtPct(v) {
+  if (v == null) return '—';
+  return Number(v).toFixed(1) + '%';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab switching
+// ─────────────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    const panels = ['revenue','clients','operations','discounts','bookings','validation'];
+    b.classList.toggle('active', panels[i] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    p.classList.toggle('active', p.id === 'tab-' + name);
+  });
+  if (name === 'bookings' && !document.getElementById('bookingsBody').children.length) {
+    loadBookings(1);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Load full dashboard data
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  showLoading('Building charts…');
+  try {
+    const res  = await fetch('/api/dashboard');
+    dashData   = await res.json();
+    hideLoading();
+    renderAll(dashData);
+  } catch(e) {
+    hideLoading();
+    showToast('Failed to load dashboard: ' + e.message, 'error');
+  }
+}
+
+function renderAll(d) {
+  document.getElementById('period-label').textContent = 'Reporting period: ' + (d.reporting_period || '');
+  renderKPIs(d.kpis);
+  renderWarnings(d.validation);
+  renderMonthlyRevenue(d.monthly_revenue);
+  renderQuarterly(d.quarterly_summary);
+  renderVolume(d.monthly_volume);
+  renderSegment(d.segment_analysis);
+  renderTopHosts(d.top_hosts);
+  renderHostTypes(d.host_type_detail);
+  renderRooms(d.room_utilisation);
+  renderStatus(d.status_breakdown);
+  renderWeekday(d.weekday_summary);
+  renderDuration(d.duration_dist);
+  renderHeatmap(d.booking_heatmap);
+  renderPayment(d.payment_analysis);
+  renderDiscounts(d.discount_analysis);
+  renderValidation(d.validation);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KPIs
+// ─────────────────────────────────────────────────────────────────────────────
+function renderKPIs(k) {
+  if (!k) return;
+  document.getElementById('k-gross').textContent   = fmt$(k.total_gross_sales);
+  document.getElementById('k-net').textContent     = fmt$(k.total_net_sales);
+  document.getElementById('k-discount').textContent= fmt$(k.total_discount);
+  document.getElementById('k-discount-pct').textContent = fmtPct(k.overall_discount_pct) + ' discount rate';
+  document.getElementById('k-events').textContent  = (k.total_events||0).toLocaleString();
+  document.getElementById('k-paid-events').textContent = (k.paid_events||0).toLocaleString() + ' paid / ' + (k.zero_sales_events||0) + ' internal';
+  document.getElementById('k-hosts').textContent   = (k.total_unique_hosts||0).toLocaleString();
+  document.getElementById('k-avg').textContent     = fmt$(k.avg_gross_per_event);
+  document.getElementById('k-hours').textContent   = (k.total_room_hours||0).toLocaleString();
+  document.getElementById('k-avg-hrs').textContent = (k.avg_event_duration_hrs||0) + ' hrs avg';
+  document.getElementById('k-monthly').textContent = fmt$(k.avg_monthly_gross);
+  document.getElementById('k-months').textContent  = (k.months_active||0) + ' months active';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Validation warnings
+// ─────────────────────────────────────────────────────────────────────────────
+function renderWarnings(v) {
+  if (!v || !v.warnings || !v.warnings.length) return;
+  const banner = document.getElementById('warnBanner');
+  const list   = document.getElementById('warnList');
+  banner.style.display = 'block';
+  v.warnings.slice(0,5).forEach(w => {
+    const li = document.createElement('li');
+    li.textContent = w;
+    list.appendChild(li);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Monthly Revenue (line + bar combo)
+// ─────────────────────────────────────────────────────────────────────────────
+function renderMonthlyRevenue(d) {
+  if (!d || !d.labels) return;
+  new Chart(document.getElementById('chartMonthlyRevenue'), {
+    type: 'bar',
+    data: {
+      labels: d.labels,
+      datasets: [
+        {
+          label: 'Gross Sales',
+          data: d.gross,
+          backgroundColor: 'rgba(255,198,39,.75)',
+          borderColor: '#FFC627',
+          borderWidth: 1,
+          order: 2,
+        },
+        {
+          label: 'Net Sales',
+          data: d.net,
+          backgroundColor: 'rgba(52,152,219,.65)',
+          borderColor: '#3498db',
+          borderWidth: 1,
+          order: 3,
+        },
+        {
+          label: 'Discount',
+          data: d.discount,
+          type: 'line',
+          borderColor: '#e74c3c',
+          backgroundColor: 'rgba(231,76,60,.15)',
+          borderWidth: 2,
+          pointRadius: 3,
+          fill: true,
+          tension: 0.4,
+          yAxisID: 'y',
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        tooltip: {
+          callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) }
+        }
+      },
+      scales: {
+        y: {
+          ticks: { callback: v => fmt$(v) },
+          grid: { color: 'rgba(255,255,255,.05)' },
+        },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quarterly
+// ─────────────────────────────────────────────────────────────────────────────
+function renderQuarterly(d) {
+  if (!d || !d.labels) return;
+  new Chart(document.getElementById('chartQuarterly'), {
+    type: 'bar',
+    data: {
+      labels: d.labels,
+      datasets: [
+        { label: 'Gross', data: d.gross, backgroundColor: 'rgba(255,198,39,.8)', borderWidth: 0 },
+        { label: 'Net',   data: d.net,   backgroundColor: 'rgba(52,152,219,.8)', borderWidth: 0 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) }}},
+      scales: {
+        y: { ticks: { callback: v => fmt$(v) }, grid: { color: 'rgba(255,255,255,.05)' } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Monthly Event Volume
+// ─────────────────────────────────────────────────────────────────────────────
+function renderVolume(d) {
+  if (!d || !d.labels) return;
+  new Chart(document.getElementById('chartVolume'), {
+    type: 'line',
+    data: {
+      labels: d.labels,
+      datasets: [
+        { label: 'Total Bookings', data: d.events,      borderColor: '#FFC627', backgroundColor: 'rgba(255,198,39,.1)', fill: true, tension: 0.4 },
+        { label: 'Paid Bookings',  data: d.paid_events, borderColor: '#2ecc71', backgroundColor: 'rgba(46,204,113,.1)', fill: true, tension: 0.4 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        y: { grid: { color: 'rgba(255,255,255,.05)' } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Segment doughnut
+// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared doughnut renderer — used for both Gross and Net segment charts so
+// the two stay visually consistent (same helper, same options, only the
+// canvas id and the values array differ).
+// ─────────────────────────────────────────────────────────────────────────────
+function renderSegmentDoughnut(canvasId, labels, values) {
+  const total = values.reduce((a, b) => a + b, 0);
+  const colors = labels.map((l, i) => segmentColor(l, i));
+  new Chart(document.getElementById(canvasId), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderColor: '#1a2744',
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '62%',
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const pct = total ? (ctx.raw / total * 100) : 0;
+              return ' ' + ctx.label + ': ' + fmt$(ctx.raw) + ' (' + pct.toFixed(1) + '%)';
+            }
+          }
+        },
+        legend: { position: 'right' },
+      },
+    },
+  });
+}
+
+function renderSegment(d) {
+  if (!d || !d.labels) return;
+  renderSegmentDoughnut('chartSegmentGross', d.labels, d.gross);
+  renderSegmentDoughnut('chartSegmentNet',   d.labels, d.net);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Top Hosts ranked list
+// ─────────────────────────────────────────────────────────────────────────────
+function renderTopHosts(hosts) {
+  if (!hosts || !hosts.length) return;
+  const tbody = document.getElementById('topHostsBody');
+  const maxGross = Math.max(...hosts.map(h => h.gross));
+  tbody.innerHTML = hosts.map((h) => `
+    <tr>
+      <td class="rank-num">#${h.rank}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="${h.host}">${h.host}</td>
+      <td style="width:120px">
+        <div class="rank-bar-wrap">
+          <div class="rank-bar-fill" style="width:${(h.gross/maxGross*100).toFixed(0)}%"></div>
+        </div>
+      </td>
+      <td class="money" style="text-align:right">${fmt$(h.gross)}</td>
+      <td class="money" style="text-align:right;color:var(--info)">${fmt$(h.net)}</td>
+    </tr>
+  `).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Host Type grouped bar
+// ─────────────────────────────────────────────────────────────────────────────
+function renderHostTypes(detail) {
+  if (!detail || !Object.keys(detail).length) return;
+  const labels   = Object.keys(detail);
+  const grossVals= labels.map(l => detail[l].total);
+  const setupVals= labels.map(l => detail[l].setup_count ? detail[l].setup_count.reduce((a,b)=>a+b,0) : 0);
+  new Chart(document.getElementById('chartHostTypes'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Gross Sales', data: grossVals, backgroundColor: PALETTE.slice(0,4), borderWidth: 0, yAxisID: 'y' },
+        { label: 'Setup Count', data: setupVals, backgroundColor: 'rgba(255,255,255,.15)', borderWidth: 0, yAxisID: 'y2', type: 'line', borderColor: '#fff', pointRadius: 5, tension: 0 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        y:  { position: 'left',  ticks: { callback: v => fmt$(v) }, grid: { color: 'rgba(255,255,255,.05)' } },
+        y2: { position: 'right', ticks: { callback: v => v.toLocaleString() }, grid: { display: false } },
+        x:  { grid: { display: false } },
+      },
+      plugins: { tooltip: { callbacks: { label: ctx => ctx.dataset.label === 'Gross Sales' ? ' ' + fmt$(ctx.raw) : ' ' + ctx.raw + ' setups' }}},
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Room utilisation (horizontal bar)
+// ─────────────────────────────────────────────────────────────────────────────
+function renderRooms(d) {
+  if (!d || !d.labels) return;
+  const labels = d.labels.map(l => l.length > 28 ? l.slice(0,26) + '…' : l);
+  new Chart(document.getElementById('chartRooms'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Bookings', data: d.bookings, backgroundColor: 'rgba(255,198,39,.75)', borderWidth: 0 },
+      ],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,.05)' } },
+        y: { grid: { display: false }, ticks: { font: { size: 10 } } },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Status pie
+// ─────────────────────────────────────────────────────────────────────────────
+function renderStatus(d) {
+  if (!d || !d.labels) return;
+  new Chart(document.getElementById('chartStatus'), {
+    type: 'pie',
+    data: {
+      labels: d.labels,
+      datasets: [{ data: d.counts, backgroundColor: PALETTE, borderColor: '#1a2744', borderWidth: 2 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom' } },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Weekday bar
+// ─────────────────────────────────────────────────────────────────────────────
+function renderWeekday(d) {
+  if (!d || !d.labels) return;
+  new Chart(document.getElementById('chartWeekday'), {
+    type: 'bar',
+    data: {
+      labels: d.labels.map(l => l.slice(0,3)),
+      datasets: [{ label: 'Avg Gross', data: d.avg_gross, backgroundColor: PALETTE, borderWidth: 0 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' Avg: ' + fmt$(ctx.raw) }}},
+      scales: {
+        y: { ticks: { callback: v => fmt$(v) }, grid: { color: 'rgba(255,255,255,.05)' } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Duration histogram
+// ─────────────────────────────────────────────────────────────────────────────
+function renderDuration(d) {
+  if (!d || !d.labels) return;
+  new Chart(document.getElementById('chartDuration'), {
+    type: 'bar',
+    data: {
+      labels: d.labels,
+      datasets: [{ label: 'Events', data: d.counts, backgroundColor: 'rgba(52,152,219,.8)', borderWidth: 0 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { grid: { color: 'rgba(255,255,255,.05)' } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Heatmap (Day × Hour)
+// ─────────────────────────────────────────────────────────────────────────────
+function renderHeatmap(d) {
+  if (!d || !d.matrix || !d.matrix.length) return;
+  const data = [];
+  d.days.forEach((day, di) => {
+    d.hours.forEach((hour, hi) => {
+      data.push({ x: hour, y: day, v: d.matrix[di][hi] });
+    });
+  });
+  const maxV = Math.max(...data.map(p => p.v));
+  new Chart(document.getElementById('chartHeatmap'), {
+    type: 'matrix',
+    data: {
+      datasets: [{
+        label: 'Bookings',
+        data,
+        backgroundColor(ctx) {
+          const v = ctx.dataset.data[ctx.dataIndex].v;
+          const alpha = maxV ? (v / maxV) : 0;
+          return `rgba(255,198,39,${0.08 + alpha * 0.88})`;
+        },
+        borderColor: '#1a2744',
+        borderWidth: 1,
+        width:  ({ chart }) => (chart.chartArea || {}).width  / d.hours.length - 2,
+        height: ({ chart }) => (chart.chartArea || {}).height / d.days.length  - 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.raw.v} booking(s) at ${ctx.raw.x} on ${ctx.raw.y}` }},
+      },
+      scales: {
+        x: { type: 'category', labels: d.hours, grid: { display: false }, ticks: { font: { size: 9 } } },
+        y: { type: 'category', labels: d.days,  grid: { display: false }, ticks: { font: { size: 10 } } },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payment type bar
+// ─────────────────────────────────────────────────────────────────────────────
+function renderPayment(d) {
+  if (!d || !d.labels) return;
+  new Chart(document.getElementById('chartPayment'), {
+    type: 'bar',
+    data: {
+      labels: d.labels.map(l => l.length > 22 ? l.slice(0,20)+'…' : l),
+      datasets: [
+        { label: 'Gross', data: d.gross, backgroundColor: 'rgba(255,198,39,.8)', borderWidth: 0 },
+        { label: 'Net',   data: d.net,   backgroundColor: 'rgba(52,152,219,.7)', borderWidth: 0 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) }}},
+      scales: {
+        y: { ticks: { callback: v => fmt$(v) }, grid: { color: 'rgba(255,255,255,.05)' } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Discount charts
+// ─────────────────────────────────────────────────────────────────────────────
+function renderDiscounts(d) {
+  if (!d) return;
+  const seg = d.by_segment;
+  if (seg && seg.labels) {
+    new Chart(document.getElementById('chartDiscSeg'), {
+      type: 'bar',
+      data: {
+        labels: seg.labels,
+        datasets: [{ label: 'Total Discount', data: seg.total_discount, backgroundColor: PALETTE, borderWidth: 0 }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + fmt$(ctx.raw) }}},
+        scales: { y: { ticks: { callback: v => fmt$(v) }, grid: { color: 'rgba(255,255,255,.05)' } }, x: { grid: { display: false } } },
+      },
+    });
+    new Chart(document.getElementById('chartDiscPct'), {
+      type: 'bar',
+      data: {
+        labels: seg.labels,
+        datasets: [{ label: 'Avg Disc %', data: seg.avg_discount_pct, backgroundColor: 'rgba(231,76,60,.7)', borderWidth: 0 }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.raw.toFixed(1) + '%' }}},
+        scales: { y: { ticks: { callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,.05)' } }, x: { grid: { display: false } } },
+      },
+    });
+  }
+  if (d.top_discounted && d.top_discounted.length) {
+    document.getElementById('discTable').innerHTML = d.top_discounted.map(r => `
+      <tr>
+        <td>${r.host}</td>
+        <td class="money">${fmt$(r.gross)}</td>
+        <td class="money">${fmt$(r.net)}</td>
+        <td class="money-red">${fmt$(r.discount)}</td>
+        <td>${fmtPct(r.avg_pct)}</td>
+      </tr>
+    `).join('');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bookings table with pagination
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadBookings(page = 1) {
+  currentPage = page;
+  const q      = document.getElementById('searchInput').value;
+  const seg    = document.getElementById('segFilter').value;
+  const status = document.getElementById('statusFilter').value;
+  const params = new URLSearchParams({
+    page, per_page: 50, sort: tableSort.col, order: tableSort.order,
+    q, segment: seg, status,
+  });
+  const res  = await fetch('/api/bookings?' + params);
+  const data = await res.json();
+  renderBookingsTable(data);
+}
+
+function sortBy(col) {
+  if (tableSort.col === col) tableSort.order = tableSort.order === 'asc' ? 'desc' : 'asc';
+  else { tableSort.col = col; tableSort.order = 'asc'; }
+  loadBookings(1);
+}
+
+function debounceSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => loadBookings(1), 350);
+}
+
+function renderBookingsTable(data) {
+  const tbody = document.getElementById('bookingsBody');
+  tbody.innerHTML = data.rows.map(r => {
+    const statusBadge = r.status.toLowerCase().includes('reserved')
+      ? `<span class="badge badge-green">Reserved</span>`
+      : r.status.toLowerCase().includes('tentative')
+        ? `<span class="badge badge-yellow">Tentative</span>`
+        : `<span class="badge badge-gray">${r.status||'—'}</span>`;
+    const disc = r['Gross Sales'] > 0 && r['Net Sales'] < r['Gross Sales']
+      ? `<span style="color:var(--danger)">${fmtPct(r.discount_pct)}</span>` : '—';
+    return `<tr>
+      <td>${r.start ? r.start.slice(0,10) : '—'}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;" title="${r.host}">${r.host}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;" title="${r.event_name}">${r.event_name||'—'}</td>
+      <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;" title="${r.room}">${r.room||'—'}</td>
+      <td>${r.duration_hrs||'—'}</td>
+      <td>${statusBadge}</td>
+      <td><span class="seg-tag">${r.segment||'—'}</span></td>
+      <td class="money">${fmt$(r['Gross Sales'])}</td>
+      <td class="money">${fmt$(r['Net Sales'])}</td>
+      <td>${disc}</td>
+    </tr>`;
+  }).join('');
+
+  // Pagination
+  const pg = document.getElementById('pagination');
+  const pInfo = document.getElementById('pagInfo');
+  pInfo.textContent = `Showing ${(data.page-1)*data.per_page+1}–${Math.min(data.page*data.per_page,data.total)} of ${data.total.toLocaleString()} bookings`;
+  const btns = [];
+  const p = data.page, tot = data.pages;
+  btns.push(`<button onclick="loadBookings(1)" ${p===1?'disabled':''}>«</button>`);
+  btns.push(`<button onclick="loadBookings(${p-1})" ${p===1?'disabled':''}>‹</button>`);
+  const win = 3;
+  for (let i = Math.max(1,p-win); i <= Math.min(tot,p+win); i++) {
+    btns.push(`<button class="${i===p?'current':''}" onclick="loadBookings(${i})">${i}</button>`);
+  }
+  btns.push(`<button onclick="loadBookings(${p+1})" ${p===tot?'disabled':''}>›</button>`);
+  btns.push(`<button onclick="loadBookings(${tot})" ${p===tot?'disabled':''}>»</button>`);
+  pg.innerHTML = `<span class="pag-info" id="pagInfo">${pInfo.textContent}</span>` + btns.join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Validation report panel
+// ─────────────────────────────────────────────────────────────────────────────
+function renderValidation(v) {
+  if (!v) return;
+  const el = document.getElementById('valReport');
+  el.innerHTML = `
+    <div class="val-grid">
+      <div class="val-item"><strong>${(v.total_rows_raw||0).toLocaleString()}</strong><span>Raw Rows Read</span></div>
+      <div class="val-item"><strong>${(v.total_rows_parsed||0).toLocaleString()}</strong><span>Bookings Parsed</span></div>
+      <div class="val-item"><strong>${(v.rows_skipped_header||0).toLocaleString()}</strong><span>Header Rows Skipped</span></div>
+      <div class="val-item"><strong>${(v.rows_skipped_total||0).toLocaleString()}</strong><span>Subtotal Rows Skipped</span></div>
+      <div class="val-item"><strong>${(v.zero_sales_count||0).toLocaleString()}</strong><span>Zero-Dollar Bookings (internal)</span></div>
+      <div class="val-item"><strong>${(v.duplicate_res_ids_count||0).toLocaleString()}</strong><span>Duplicate Res IDs (multi-room)</span></div>
+      <div class="val-item"><strong>${(v.mismatch_count||0)}</strong><span>Net > Gross Mismatches</span></div>
+    </div>
+    ${v.warnings && v.warnings.length ? `
+      <div style="margin-top:1.25rem">
+        <p style="font-size:.82rem;color:var(--warning);margin-bottom:.5rem;font-weight:600;">⚠ Warnings (${v.warnings.length})</p>
+        <ul style="font-size:.8rem;color:var(--text-muted);padding-left:1rem;">
+          ${v.warnings.map(w=>`<li style="margin-bottom:.3rem">${w}</li>`).join('')}
+        </ul>
+      </div>
+    ` : '<p style="color:var(--success);margin-top:1rem;font-size:.85rem;">✅ No validation warnings.</p>'}
+  `;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────────────────────────
+loadDashboard();
+</script>
+{% endblock %}

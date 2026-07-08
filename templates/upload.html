@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% block title %}Upload Files{% endblock %}
+
+{% block nav_actions %}{% endblock %}
+
+{% block head_extra %}
+<style>
+.upload-wrapper {
+  min-height: calc(100vh - 60px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 2rem;
+}
+.upload-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 3rem;
+  max-width: 680px;
+  width: 100%;
+  box-shadow: var(--shadow);
+}
+.upload-logo {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+.upload-logo .badge-lg {
+  display: inline-block;
+  background: var(--maroon);
+  color: var(--gold);
+  font-size: 1.4rem;
+  font-weight: 700;
+  padding: 10px 22px;
+  border-radius: 10px;
+  letter-spacing: 1px;
+  margin-bottom: 1rem;
+}
+.upload-logo h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: .5rem; }
+.upload-logo p  { color: var(--text-muted); font-size: .9rem; }
+
+/* Drop zone */
+.drop-zone {
+  border: 2px dashed var(--card-border);
+  border-radius: var(--radius);
+  padding: 2.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  position: relative;
+  margin: 1.5rem 0;
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--gold);
+  background: rgba(255,198,39,.05);
+}
+.drop-zone input[type="file"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer;
+}
+.drop-icon { font-size: 2.5rem; margin-bottom: .75rem; }
+.drop-zone h3 { font-size: 1rem; margin-bottom: .4rem; }
+.drop-zone p  { color: var(--text-muted); font-size: .82rem; }
+
+/* File list */
+.file-list { list-style: none; margin: 1rem 0; }
+.file-list li {
+  display: flex; align-items: center; gap: .75rem;
+  background: var(--gray-700);
+  border-radius: 8px; padding: .65rem 1rem;
+  margin-bottom: .5rem; font-size: .85rem;
+}
+.file-list li .file-role {
+  margin-left: auto;
+  font-size: .75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.role-net          { background: rgba(46,204,113,.2); color: #2ecc71; }
+.role-gross        { background: rgba(52,152,219,.2); color: #3498db; }
+.role-host         { background: rgba(155,89,182,.2); color: #9b59b6; }
+.role-unknown      { background: rgba(231,76,60,.2);  color: #e74c3c; }
+
+/* Buttons */
+.btn-primary {
+  background: var(--gold);
+  color: var(--gray-900);
+  border: none;
+  padding: .8rem 2rem;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: .95rem;
+  cursor: pointer;
+  width: 100%;
+  transition: all .2s;
+}
+.btn-primary:hover  { background: var(--gold-light); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--card-border);
+  padding: .65rem 1.5rem;
+  border-radius: 8px;
+  font-size: .85rem;
+  cursor: pointer;
+  width: 100%;
+  margin-top: .75rem;
+  transition: all .2s;
+}
+.btn-secondary:hover { border-color: var(--gold); color: var(--gold); }
+
+/* File requirements box */
+.req-box {
+  background: var(--gray-700);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  font-size: .82rem;
+  color: var(--text-muted);
+}
+.req-box strong { color: var(--text); display: block; margin-bottom: .5rem; }
+.req-box ul { padding-left: 1.25rem; }
+.req-box li { margin-bottom: .25rem; }
+
+/* Progress bar */
+.progress-bar-wrap {
+  background: var(--gray-700);
+  border-radius: 99px;
+  height: 6px;
+  margin: 1rem 0;
+  overflow: hidden;
+  display: none;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--gold);
+  border-radius: 99px;
+  width: 0%;
+  transition: width .3s;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="upload-wrapper">
+  <div class="upload-card">
+    <div class="upload-logo">
+      <div class="badge-lg">ASU KE</div>
+      <h1>EMS Analytics Dashboard</h1>
+      <p>Arizona State University – Knowledge Enterprise Development</p>
+    </div>
+
+    <div class="req-box">
+      <strong>📂 Required Files (upload all three together)</strong>
+      <ul>
+        <li><strong>Net Sales by Booking</strong> – filename must contain "Net"</li>
+        <li><strong>Gross Sales by Booking</strong> – filename must contain "Gross"</li>
+        <li><strong>Gross Sales by Host</strong> – filename must contain "Host"</li>
+      </ul>
+    </div>
+
+    <!-- Drop Zone -->
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" multiple accept=".xlsx,.xls"/>
+      <div class="drop-icon">📊</div>
+      <h3>Drop your Excel files here</h3>
+      <p>or click to browse — accepts .xlsx / .xls</p>
+    </div>
+
+    <!-- File preview list -->
+    <ul class="file-list" id="fileList"></ul>
+
+    <!-- Progress -->
+    <div class="progress-bar-wrap" id="progressWrap">
+      <div class="progress-bar-fill" id="progressBar"></div>
+    </div>
+
+    <!-- Upload button -->
+    <button class="btn-primary" id="uploadBtn" disabled onclick="uploadFiles()">
+      Upload &amp; Analyse
+    </button>
+
+    <button class="btn-secondary" onclick="loadDemo()">
+      ⚡ Load Demo Data (pre-loaded EMS files)
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const dropZone   = document.getElementById('dropZone');
+const fileInput  = document.getElementById('fileInput');
+const fileList   = document.getElementById('fileList');
+const uploadBtn  = document.getElementById('uploadBtn');
+const progressWrap = document.getElementById('progressWrap');
+const progressBar  = document.getElementById('progressBar');
+
+let selectedFiles = [];
+
+function detectRole(name) {
+  const n = name.toLowerCase();
+  if (n.includes('net'))   return { label: 'Net Sales',   cls: 'role-net'   };
+  if (n.includes('host'))  return { label: 'Host Report', cls: 'role-host'  };
+  if (n.includes('gross')) return { label: 'Gross Sales', cls: 'role-gross' };
+  return { label: 'Unknown', cls: 'role-unknown' };
+}
+
+function renderFileList(files) {
+  selectedFiles = Array.from(files);
+  fileList.innerHTML = '';
+  selectedFiles.forEach(f => {
+    const role = detectRole(f.name);
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <span>📄</span>
+      <span>${f.name}</span>
+      <span style="color:var(--text-muted);font-size:.78rem">${(f.size/1024).toFixed(0)} KB</span>
+      <span class="file-role ${role.cls}">${role.label}</span>
+    `;
+    fileList.appendChild(li);
+  });
+  uploadBtn.disabled = selectedFiles.length === 0;
+}
+
+fileInput.addEventListener('change', e => renderFileList(e.target.files));
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave',  () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  renderFileList(e.dataTransfer.files);
+});
+
+async function uploadFiles() {
+  if (!selectedFiles.length) return;
+  const fd = new FormData();
+  selectedFiles.forEach(f => fd.append('files', f));
+
+  showLoading('Parsing your Excel files…');
+  uploadBtn.disabled = true;
+  progressWrap.style.display = 'block';
+
+  // Animate fake progress
+  let pct = 0;
+  const timer = setInterval(() => {
+    pct = Math.min(pct + Math.random() * 15, 90);
+    progressBar.style.width = pct + '%';
+  }, 300);
+
+  try {
+    const res  = await fetch('/upload/files', { method: 'POST', body: fd });
+    const data = await res.json();
+    clearInterval(timer);
+    progressBar.style.width = '100%';
+
+    if (!res.ok) {
+      hideLoading();
+      showToast('Error: ' + (data.error || 'Upload failed'), 'error', 6000);
+      uploadBtn.disabled = false;
+      return;
+    }
+
+    if (data.warnings && data.warnings.length) {
+      console.warn('Validation warnings:', data.warnings);
+    }
+
+    showToast(`✅ Loaded ${data.rows_parsed} bookings – redirecting…`, 'success');
+    setTimeout(() => { window.location = data.redirect; }, 1000);
+  } catch (err) {
+    clearInterval(timer);
+    hideLoading();
+    showToast('Network error: ' + err.message, 'error');
+    uploadBtn.disabled = false;
+  }
+}
+
+async function loadDemo() {
+  showLoading('Loading demo data…');
+  try {
+    const res  = await fetch('/upload/demo', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      hideLoading();
+      showToast('Demo: ' + (data.error || 'Failed'), 'error');
+      return;
+    }
+    showToast('✅ Demo data loaded – redirecting…', 'success');
+    setTimeout(() => { window.location = data.redirect; }, 800);
+  } catch (err) {
+    hideLoading();
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+</script>
+{% endblock %}

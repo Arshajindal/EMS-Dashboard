@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{% block title %}EMS Analytics{% endblock %} – ASU Knowledge Enterprise</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Chart.js Matrix plugin (heatmap) -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
+
+  <style>
+    /* ── CSS Variables ─────────────────────────────────────────── */
+    :root {
+      --gold:       #FFC627;
+      --gold-light: #FFD966;
+      --maroon:     #8C1D40;
+      --maroon-dk:  #6B0F2E;
+      --gray-900:   #1a1a2e;
+      --gray-800:   #16213e;
+      --gray-700:   #0f3460;
+      --gray-600:   #1e3a5f;
+      --gray-200:   #e8ecf0;
+      --gray-100:   #f4f6f9;
+      --text:       #e8ecf0;
+      --text-muted: #9ab0cc;
+      --card-bg:    #1a2744;
+      --card-border:#253a60;
+      --success:    #2ecc71;
+      --warning:    #f39c12;
+      --danger:     #e74c3c;
+      --info:       #3498db;
+      --radius:     12px;
+      --shadow:     0 4px 24px rgba(0,0,0,.35);
+    }
+
+    /* ── Reset / Base ──────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--gray-900);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+    }
+    a { color: var(--gold); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Top Nav ────────────────────────────────────────────────── */
+    .navbar {
+      background: var(--gray-800);
+      border-bottom: 2px solid var(--maroon);
+      padding: 0 2rem;
+      height: 60px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 2px 12px rgba(0,0,0,.4);
+    }
+    .navbar-brand {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .brand-badge {
+      background: var(--maroon);
+      color: var(--gold);
+      font-weight: 700;
+      font-size: .85rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+      letter-spacing: .5px;
+    }
+    .navbar-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .navbar-period {
+      font-size: .78rem;
+      color: var(--text-muted);
+      margin-left: 8px;
+    }
+    .navbar-actions { display: flex; align-items: center; gap: 1rem; }
+    .btn-outline-sm {
+      border: 1px solid var(--card-border);
+      background: transparent;
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: .8rem;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .btn-outline-sm:hover { background: var(--card-bg); border-color: var(--gold); color: var(--gold); }
+
+    /* ── Main content ───────────────────────────────────────────── */
+    .main-content { flex: 1; padding: 2rem; max-width: 1600px; margin: 0 auto; width: 100%; }
+
+    /* ── Toast notification ─────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 1.5rem; right: 1.5rem;
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      color: var(--text); padding: 1rem 1.5rem;
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      font-size: .875rem; max-width: 380px;
+      opacity: 0; transform: translateY(20px);
+      transition: all .3s; z-index: 9999; pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    #toast.toast-success { border-color: var(--success); }
+    #toast.toast-error   { border-color: var(--danger);  }
+    #toast.toast-warning { border-color: var(--warning); }
+
+    /* ── Loading overlay ────────────────────────────────────────── */
+    #loading-overlay {
+      position: fixed; inset: 0;
+      background: rgba(10,15,30,.85);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 9000; opacity: 0; pointer-events: none;
+      transition: opacity .3s;
+    }
+    #loading-overlay.show { opacity: 1; pointer-events: all; }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid var(--card-border);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin-bottom: 1rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading-overlay p { color: var(--text-muted); font-size: .95rem; }
+
+    /* ── Scrollbar ──────────────────────────────────────────────── */
+    ::-webkit-scrollbar       { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--gray-800); }
+    ::-webkit-scrollbar-thumb { background: var(--gray-600); border-radius: 3px; }
+  </style>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+
+<!-- ── Navbar ──────────────────────────────────────────────────────────── -->
+<nav class="navbar">
+  <div class="navbar-brand">
+    <span class="brand-badge">ASU KE</span>
+    <span class="navbar-title">EMS Analytics Dashboard</span>
+    {% if reporting_period is defined and reporting_period %}
+      <span class="navbar-period">{{ reporting_period }}</span>
+    {% endif %}
+  </div>
+  <div class="navbar-actions">
+    {% block nav_actions %}
+    <button class="btn-outline-sm" onclick="window.location='/upload-page'">↑ Upload New</button>
+    {% endblock %}
+  </div>
+</nav>
+
+<!-- ── Page Content ─────────────────────────────────────────────────────── -->
+<main class="main-content">
+  {% block content %}{% endblock %}
+</main>
+
+<!-- ── Toast ────────────────────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<!-- ── Loading Overlay ──────────────────────────────────────────────────── -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <p id="loading-msg">Processing your files…</p>
+</div>
+
+<script>
+  // ── Toast helper ──────────────────────────────────────────────────────────
+  function showToast(msg, type='info', duration=4000) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `show toast-${type}`;
+    setTimeout(() => { el.className = ''; }, duration);
+  }
+
+  // ── Loading overlay ───────────────────────────────────────────────────────
+  function showLoading(msg='Processing…') {
+    document.getElementById('loading-msg').textContent = msg;
+    document.getElementById('loading-overlay').classList.add('show');
+  }
+  function hideLoading() {
+    document.getElementById('loading-overlay').classList.remove('show');
+  }
+</script>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>
