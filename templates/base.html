@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>{% block title %}EMS Analytics{% endblock %} – ASU Knowledge Enterprise</title>
 
+  <!-- Apply saved theme before first paint to avoid a flash of the wrong theme -->
+  <script>
+    (function() {
+      var theme = localStorage.getItem('theme') || 'light';
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
@@ -37,6 +45,28 @@
       --info:       #3498db;
       --radius:     12px;
       --shadow:     0 4px 24px rgba(0,0,0,.35);
+      --accent-text:#FFC627;
+      --hover-bg:   rgba(255,255,255,.03);
+      --overlay-bg: rgba(255,255,255,.1);
+      --grid-line:  rgba(255,255,255,.05);
+      --on-gold:    #1a1a2e;
+    }
+
+    /* ── Light theme overrides ─────────────────────────────────── */
+    [data-theme="light"] {
+      --gray-900:   #f4f6f9;
+      --gray-800:   #ffffff;
+      --gray-700:   #e8ecf0;
+      --gray-600:   #c8d0da;
+      --text:       #1a1a2e;
+      --text-muted: #5b6b82;
+      --card-bg:    #ffffff;
+      --card-border:#dbe1ea;
+      --shadow:     0 4px 24px rgba(20,30,50,.08);
+      --accent-text:#8a6600;
+      --hover-bg:   rgba(0,0,0,.035);
+      --overlay-bg: rgba(0,0,0,.08);
+      --grid-line:  rgba(0,0,0,.06);
     }
 
     /* ── Reset / Base ──────────────────────────────────────────── */
@@ -49,7 +79,7 @@
       min-height: 100vh;
       display: flex; flex-direction: column;
     }
-    a { color: var(--gold); text-decoration: none; }
+    a { color: var(--accent-text); text-decoration: none; }
     a:hover { text-decoration: underline; }
 
     /* ── Top Nav ────────────────────────────────────────────────── */
@@ -95,7 +125,7 @@
       cursor: pointer;
       transition: all .2s;
     }
-    .btn-outline-sm:hover { background: var(--card-bg); border-color: var(--gold); color: var(--gold); }
+    .btn-outline-sm:hover { background: var(--card-bg); border-color: var(--gold); color: var(--accent-text); }
 
     /* ── Main content ───────────────────────────────────────────── */
     .main-content { flex: 1; padding: 2rem; max-width: 1600px; margin: 0 auto; width: 100%; }
@@ -155,6 +185,7 @@
     {% endif %}
   </div>
   <div class="navbar-actions">
+    <button class="btn-outline-sm" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark theme">🌙</button>
     {% block nav_actions %}
     <button class="btn-outline-sm" onclick="window.location='/upload-page'">↑ Upload New</button>
     {% endblock %}
@@ -192,6 +223,23 @@
   function hideLoading() {
     document.getElementById('loading-overlay').classList.remove('show');
   }
+
+  // ── Theme toggle ─────────────────────────────────────────────────────────
+  function applyThemeIcon() {
+    const btn = document.getElementById('themeToggle');
+    if (!btn) return;
+    const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+    btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+  }
+  function toggleTheme() {
+    const html = document.documentElement;
+    const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    applyThemeIcon();
+    document.dispatchEvent(new CustomEvent('themechange', { detail: { theme: next } }));
+  }
+  applyThemeIcon();
 </script>
 
 {% block scripts %}{% endblock %}
