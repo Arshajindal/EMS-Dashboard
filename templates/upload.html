@@ -55,6 +55,14 @@
 .drop-zone input[type="file"] {
   position: absolute; inset: 0; opacity: 0; cursor: pointer;
 }
+.drop-zone.disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.drop-zone.disabled input[type="file"] {
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .drop-icon { font-size: 2.5rem; margin-bottom: .75rem; }
 .drop-zone h3 { font-size: 1rem; margin-bottom: .4rem; }
 .drop-zone p  { color: var(--text-muted); font-size: .82rem; }
@@ -73,6 +81,20 @@
   padding: 2px 8px;
   border-radius: 4px;
   font-weight: 600;
+}
+.file-list li .remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.file-list li .remove-btn:hover {
+  color: #e74c3c;
+  background: rgba(231,76,60,.15);
 }
 .role-net          { background: rgba(46,204,113,.2); color: #2ecc71; }
 .role-gross        { background: rgba(52,152,219,.2); color: #3498db; }
@@ -151,7 +173,7 @@
     </div>
 
     <div class="req-box">
-      <strong>📂 Required Files (upload all three together)</strong>
+      <strong>📂 Required Files (add one at a time or all at once — max 3)</strong>
       <ul>
         <li><strong>Net Sales by Booking</strong> – filename must contain "Net"</li>
         <li><strong>Gross Sales by Booking</strong> – filename must contain "Gross"</li>
@@ -163,8 +185,8 @@
     <div class="drop-zone" id="dropZone">
       <input type="file" id="fileInput" multiple accept=".xlsx,.xls"/>
       <div class="drop-icon">📊</div>
-      <h3>Drop your Excel files here</h3>
-      <p>or click to browse — accepts .xlsx / .xls</p>
+      <h3 id="dropZoneTitle">Drop your Excel files here</h3>
+      <p id="dropZoneHint">or click to browse — accepts .xlsx / .xls</p>
     </div>
 
     <!-- File preview list -->
@@ -195,7 +217,10 @@ const fileList   = document.getElementById('fileList');
 const uploadBtn  = document.getElementById('uploadBtn');
 const progressWrap = document.getElementById('progressWrap');
 const progressBar  = document.getElementById('progressBar');
+const dropZoneTitle = document.getElementById('dropZoneTitle');
+const dropZoneHint  = document.getElementById('dropZoneHint');
 
+const MAX_FILES = 3;
 let selectedFiles = [];
 
 function detectRole(name) {
@@ -206,10 +231,35 @@ function detectRole(name) {
   return { label: 'Unknown', cls: 'role-unknown' };
 }
 
-function renderFileList(files) {
-  selectedFiles = Array.from(files);
+function addFiles(files) {
+  const incoming = Array.from(files);
+  let skippedDuplicate = false;
+  let skippedLimit = false;
+
+  for (const f of incoming) {
+    if (selectedFiles.length >= MAX_FILES) { skippedLimit = true; break; }
+    const isDuplicate = selectedFiles.some(sf => sf.name === f.name && sf.size === f.size);
+    if (isDuplicate) { skippedDuplicate = true; continue; }
+    selectedFiles.push(f);
+  }
+
+  if (skippedLimit) {
+    showToast(`Maximum of ${MAX_FILES} files allowed. Remove a file to add another.`, 'error');
+  } else if (skippedDuplicate) {
+    showToast('One or more files were already added.', 'error');
+  }
+
+  renderFileList();
+}
+
+function removeFile(index) {
+  selectedFiles.splice(index, 1);
+  renderFileList();
+}
+
+function renderFileList() {
   fileList.innerHTML = '';
-  selectedFiles.forEach(f => {
+  selectedFiles.forEach((f, i) => {
     const role = detectRole(f.name);
     const li = document.createElement('li');
     li.innerHTML = `
@@ -217,20 +267,39 @@ function renderFileList(files) {
       <span>${f.name}</span>
       <span style="color:var(--text-muted);font-size:.78rem">${(f.size/1024).toFixed(0)} KB</span>
       <span class="file-role ${role.cls}">${role.label}</span>
+      <button type="button" class="remove-btn" title="Remove file" data-index="${i}">✕</button>
     `;
+    li.querySelector('.remove-btn').addEventListener('click', () => removeFile(i));
     fileList.appendChild(li);
   });
+
   uploadBtn.disabled = selectedFiles.length === 0;
+
+  const atLimit = selectedFiles.length >= MAX_FILES;
+  fileInput.disabled = atLimit;
+  dropZone.classList.toggle('disabled', atLimit);
+  dropZoneTitle.textContent = atLimit ? 'Maximum of 3 files added' : 'Drop your Excel files here';
+  dropZoneHint.textContent  = atLimit ? 'Remove a file below to add a different one' : 'or click to browse — accepts .xlsx / .xls';
+
+  // Reset the input's value so selecting the same file again after removal re-fires 'change'.
+  fileInput.value = '';
 }
 
-fileInput.addEventListener('change', e => renderFileList(e.target.files));
+fileInput.addEventListener('change', e => addFiles(e.target.files));
 
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  if (selectedFiles.length < MAX_FILES) dropZone.classList.add('drag-over');
+});
 dropZone.addEventListener('dragleave',  () => dropZone.classList.remove('drag-over'));
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('drag-over');
-  renderFileList(e.dataTransfer.files);
+  if (selectedFiles.length >= MAX_FILES) {
+    showToast(`Maximum of ${MAX_FILES} files allowed. Remove a file to add another.`, 'error');
+    return;
+  }
+  addFiles(e.dataTransfer.files);
 });
 
 async function uploadFiles() {
