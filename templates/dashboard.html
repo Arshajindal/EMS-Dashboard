@@ -489,6 +489,9 @@ function setChartDefaults() {
   Chart.defaults.plugins.tooltip.borderColor     = cssVar('--card-border');
   Chart.defaults.plugins.tooltip.borderWidth     = 1;
   Chart.defaults.plugins.tooltip.padding         = 10;
+  Chart.defaults.plugins.tooltip.titleColor      = cssVar('--text');
+  Chart.defaults.plugins.tooltip.bodyColor       = cssVar('--text');
+  Chart.defaults.plugins.tooltip.footerColor     = cssVar('--text');
 }
 function destroyAllCharts() {
   document.querySelectorAll('canvas').forEach(c => {
