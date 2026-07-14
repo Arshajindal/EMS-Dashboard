@@ -196,6 +196,7 @@ def top_hosts(
     bookings: pd.DataFrame,
     host_summary: pd.DataFrame,
     n: int = 15,
+    sort_by: str = "net",
 ) -> list[dict]:
     """
     Ranked table: top revenue-generating hosts.
@@ -206,9 +207,14 @@ def top_hosts(
     from the Host file during parsing (see _apply_host_type in parser.py),
     so ranking and segmentation both stay consistent with the rest of the
     dashboard's revenue numbers.
+
+    `sort_by` selects which metric ranks the top N: "gross" or "net".
     """
     if bookings.empty:
         return []
+
+    if sort_by not in ("gross", "net"):
+        sort_by = "gross"
 
     grp = (
         bookings.groupby("host")
@@ -219,7 +225,7 @@ def top_hosts(
             segment=("segment", "first"),
         )
         .reset_index()
-        .sort_values("gross", ascending=False)
+        .sort_values(sort_by, ascending=False)
         .head(n)
     )
     return [
