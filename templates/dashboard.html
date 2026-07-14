@@ -376,7 +376,7 @@ tr:hover td { background: var(--hover-bg); }
   </div>
   <div class="chart-grid">
     <div class="chart-card">
-      <h3>Average Revenue by Day of Week</h3>
+      <h3>Total Revenue by Day of Week (Gross)</h3>
       <div class="chart-wrap"><canvas id="chartWeekday"></canvas></div>
     </div>
     <div class="chart-card">
@@ -893,11 +893,11 @@ function renderWeekday(d) {
     type: 'bar',
     data: {
       labels: d.labels.map(l => l.slice(0,3)),
-      datasets: [{ label: 'Avg Gross', data: d.avg_gross, backgroundColor: PALETTE, borderWidth: 0 }],
+      datasets: [{ label: 'Total Gross', data: d.total_gross, backgroundColor: PALETTE, borderWidth: 0 }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' Avg: ' + fmt$(ctx.raw) }}},
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' Total: ' + fmt$(ctx.raw) }}},
       scales: {
         y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
         x: { grid: { display: false } },

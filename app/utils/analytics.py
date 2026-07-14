@@ -305,21 +305,21 @@ def booking_heatmap(bookings: pd.DataFrame) -> dict:
 
 
 def weekday_summary(bookings: pd.DataFrame) -> dict:
-    """Bar chart: average Gross Sales by day of week."""
+    """Bar chart: total Gross Sales by day of week."""
     if bookings.empty:
-        return {"labels": [], "avg_gross": [], "total_events": []}
+        return {"labels": [], "total_gross": [], "total_events": []}
 
     days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     grp = (
         bookings.groupby("weekday")
-        .agg(avg_gross=("Gross Sales", "mean"), events=("res_id", "count"))
+        .agg(total_gross=("Gross Sales", "sum"), events=("res_id", "count"))
         .reindex(days_order)
         .fillna(0)
         .reset_index()
     )
     return {
         "labels":       grp["weekday"].tolist(),
-        "avg_gross":    [_round2(v) for v in grp["avg_gross"]],
+        "total_gross":  [_round2(v) for v in grp["total_gross"]],
         "total_events": grp["events"].astype(int).tolist(),
     }
 
