@@ -105,9 +105,9 @@ def _safe_float(v) -> Optional[float]:
         return None
 
 
-def _is_total_row(row_series) -> bool:
+def _is_total_row(row) -> bool:
     """Detect subtotal / grand-total / page-footer rows."""
-    for cell in row_series:
+    for cell in row:
         s = _clean_str(cell)
         if s in ("Date Total", "Month Total", "Grand Total"):
             return True
@@ -314,7 +314,7 @@ def _parse_booking_sheet(
     records = []
     pending: dict = {}
 
-    for _, row in raw_df.iterrows():
+    for row in raw_df.itertuples(index=False, name=None):
         # ── Skip total / page-footer rows ─────────────────────────────────────
         if _is_total_row(row):
             report.rows_skipped_total += 1
@@ -323,14 +323,14 @@ def _parse_booking_sheet(
                 pending = {}
             continue
 
-        v_start  = row.iloc[col_start]
-        v_end    = row.iloc[col_end]
-        v_host   = row.iloc[col_host]
-        v_event  = row.iloc[col_event]  if col_event  is not None else np.nan
-        v_pay    = row.iloc[col_pay]    if col_pay    is not None else np.nan
-        v_status = row.iloc[col_status] if col_status is not None else np.nan
-        v_resid  = row.iloc[col_resid]
-        v_sales  = row.iloc[col_sales]
+        v_start  = row[col_start]
+        v_end    = row[col_end]
+        v_host   = row[col_host]
+        v_event  = row[col_event]  if col_event  is not None else np.nan
+        v_pay    = row[col_pay]    if col_pay    is not None else np.nan
+        v_status = row[col_status] if col_status is not None else np.nan
+        v_resid  = row[col_resid]
+        v_sales  = row[col_sales]
 
         # ── Date-header row (midnight, no end time, no host) ──────────────────
         if pd.notna(v_start) and pd.isna(v_end) and pd.isna(v_host):
