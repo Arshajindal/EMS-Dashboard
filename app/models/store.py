@@ -20,6 +20,7 @@ class DataStore:
     validation: dict = field(default_factory=dict)
     loaded: bool = False
     source_files: list = field(default_factory=list)
+    dashboard_cache: Optional[dict] = None
 
 
 _store = DataStore()

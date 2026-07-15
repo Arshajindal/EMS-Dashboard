@@ -53,13 +53,15 @@ def api_dashboard():
     if err:
         return err
     store = get_store()
-    payload = build_full_dashboard(
-        store.bookings,
-        store.host_summary,
-        store.reporting_period,
-        store.validation,
-    )
-    return jsonify(_clean(payload))
+    if store.dashboard_cache is None:
+        payload = build_full_dashboard(
+            store.bookings,
+            store.host_summary,
+            store.reporting_period,
+            store.validation,
+        )
+        store.dashboard_cache = _clean(payload)
+    return jsonify(store.dashboard_cache)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
