@@ -4,7 +4,7 @@ from pathlib import Path
 
 from flask import Blueprint, request, jsonify, current_app
 
-from app.models.store import set_store, clear_store
+from app.models.store import save_dataset, delete_dataset, dataset_exists
 from app.utils.parser import parse_ems_files
 
 upload_bp = Blueprint("upload", __name__)
@@ -103,7 +103,7 @@ def upload_files():
             "details": dataset.validation.errors,
         }), 500
 
-    set_store(
+    dataset_id = save_dataset(
         bookings=dataset.bookings,
         host_summary=dataset.host_summary,
         reporting_period=dataset.reporting_period,
@@ -113,6 +113,7 @@ def upload_files():
 
     return jsonify({
         "status":           "ok",
+        "dataset_id":       dataset_id,
         "rows_parsed":      dataset.validation.total_rows_parsed,
         "reporting_period": dataset.reporting_period,
         "warnings":         dataset.validation.warnings,
@@ -122,8 +123,13 @@ def upload_files():
 
 @upload_bp.route("/clear", methods=["POST"])
 def clear_data():
-    clear_store()
-    return jsonify({"status": "cleared"})
+    dataset_id = request.form.get("dataset_id") or request.args.get("dataset_id")
+    if not dataset_id:
+        return jsonify({"error": "dataset_id is required."}), 400
+    if not dataset_exists(dataset_id):
+        return jsonify({"error": f"Unknown dataset_id '{dataset_id}'."}), 404
+    delete_dataset(dataset_id)
+    return jsonify({"status": "cleared", "dataset_id": dataset_id})
 
 
 @upload_bp.route("/demo", methods=["POST"])
@@ -150,7 +156,7 @@ def load_demo():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
-    set_store(
+    dataset_id = save_dataset(
         bookings=dataset.bookings,
         host_summary=dataset.host_summary,
         reporting_period=dataset.reporting_period,
@@ -160,6 +166,7 @@ def load_demo():
 
     return jsonify({
         "status":           "ok",
+        "dataset_id":       dataset_id,
         "rows_parsed":      dataset.validation.total_rows_parsed,
         "reporting_period": dataset.reporting_period,
         "redirect":         "/dashboard",

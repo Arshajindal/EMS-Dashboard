@@ -1,7 +1,7 @@
 """Main Blueprint – HTML page routes."""
 import re
-from flask import Blueprint, render_template, redirect, url_for
-from app.models.store import is_loaded, get_store
+from flask import Blueprint, render_template, redirect, url_for, request
+from app.models.store import list_datasets, most_recent_dataset_id, get_dataset_meta
 
 main_bp = Blueprint("main", __name__)
 
@@ -20,21 +20,22 @@ def _fiscal_year_label(reporting_period: str) -> str:
 
 @main_bp.route("/")
 def index():
-    if is_loaded():
+    if list_datasets():
         return redirect(url_for("main.dashboard"))
     return render_template("upload.html")
 
 
 @main_bp.route("/dashboard")
 def dashboard():
-    if not is_loaded():
+    dataset_id = request.args.get("ds") or most_recent_dataset_id()
+    meta = get_dataset_meta(dataset_id) if dataset_id else None
+    if meta is None:
         return redirect(url_for("main.index"))
-    store = get_store()
     return render_template(
         "dashboard.html",
-        reporting_period=store.reporting_period,
-        fiscal_year_label=_fiscal_year_label(store.reporting_period),
-        source_files=store.source_files,
+        reporting_period=meta["reporting_period"],
+        fiscal_year_label=_fiscal_year_label(meta["reporting_period"]),
+        source_files=meta["source_files"],
     )
 
 

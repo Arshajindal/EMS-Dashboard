@@ -481,12 +481,68 @@ tr:hover td { background: var(--hover-bg); }
 {% block scripts %}
 <script>
 // ─────────────────────────────────────────────────────────────────────────────
-// Global state
+// Active dataset resolution — every panel resolves its dataset fresh from the
+// URL's ?ds= query param on each fetch, rather than one value cached once at
+// page load. sessionStorage is the fallback/continuity layer so navigating
+// back to the dashboard without an explicit ?ds= still shows the last dataset
+// this tab was looking at. Never localStorage: it's shared across same-origin
+// tabs and would bleed dataset selection between them (see CLAUDE.md).
 // ─────────────────────────────────────────────────────────────────────────────
-let dashData = null;
-let tableSort = { col: 'start', order: 'asc' };
-let currentPage = 1;
+function getActiveDatasetId() {
+  const fromUrl = new URLSearchParams(window.location.search).get('ds');
+  if (fromUrl) {
+    sessionStorage.setItem('activeDatasetId', fromUrl);
+    return fromUrl;
+  }
+  return sessionStorage.getItem('activeDatasetId') || null;
+}
+function withDs(params) {
+  const p = params || new URLSearchParams();
+  const ds = getActiveDatasetId();
+  if (ds) p.set('ds', ds);
+  return p;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-panel state — each panel (one per tab, plus the always-visible summary
+// strip) owns its own last-received data and its own Chart.js instance
+// registry. Panels are destroyed/re-rendered independently instead of one
+// global dashData blob + one flat destroyAllCharts() sweeping every canvas
+// on the page.
+// ─────────────────────────────────────────────────────────────────────────────
+function createPanel(name) {
+  return {
+    name,
+    data: null,
+    datasetId: null,
+    charts: {},
+    destroyCharts() {
+      Object.values(this.charts).forEach(c => c && c.destroy());
+      this.charts = {};
+    },
+  };
+}
+
+const panels = {
+  summary:       createPanel('summary'),
+  revenue:       createPanel('revenue'),
+  clients:       createPanel('clients'),
+  operations:    createPanel('operations'),
+  discounts:     createPanel('discounts'),
+  bookingsTable: createPanel('bookingsTable'),
+  validation:    createPanel('validation'),
+};
+panels.bookingsTable.tableSort = { col: 'start', order: 'asc' };
+panels.bookingsTable.currentPage = 1;
 let searchTimer = null;
+
+function makeChart(panel, canvasId, config) {
+  const existing = panel.charts[canvasId];
+  if (existing) existing.destroy();
+  const chart = new Chart(document.getElementById(canvasId), config);
+  panel.charts[canvasId] = chart;
+  return chart;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Chart.js global defaults (theme-aware — Chart.js bakes colors into each
@@ -512,12 +568,6 @@ function setChartDefaults() {
   Chart.defaults.plugins.tooltip.titleColor      = cssVar('--text');
   Chart.defaults.plugins.tooltip.bodyColor       = cssVar('--text');
   Chart.defaults.plugins.tooltip.footerColor     = cssVar('--text');
-}
-function destroyAllCharts() {
-  document.querySelectorAll('canvas').forEach(c => {
-    const existing = Chart.getChart(c);
-    if (existing) existing.destroy();
-  });
 }
 setChartDefaults();
 
@@ -562,8 +612,8 @@ function fmtPct(v) {
 // ─────────────────────────────────────────────────────────────────────────────
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach((b,i) => {
-    const panels = ['revenue','clients','operations','discounts','bookings','validation'];
-    b.classList.toggle('active', panels[i] === name);
+    const panelNames = ['revenue','clients','operations','discounts','bookings','validation'];
+    b.classList.toggle('active', panelNames[i] === name);
   });
   document.querySelectorAll('.tab-panel').forEach(p => {
     p.classList.toggle('active', p.id === 'tab-' + name);
@@ -579,37 +629,67 @@ function switchTab(name) {
 async function loadDashboard() {
   showLoading('Building charts…');
   try {
-    const res  = await fetch('/api/dashboard');
-    dashData   = await res.json();
+    const qs  = withDs().toString();
+    const res = await fetch('/api/dashboard' + (qs ? '?' + qs : ''));
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || ('Request failed (' + res.status + ')'));
+    }
+    const d = await res.json();
     hideLoading();
-    renderAll(dashData);
+    renderAllPanels(d);
   } catch(e) {
     hideLoading();
     showToast('Failed to load dashboard: ' + e.message, 'error');
   }
 }
 
-function renderAll(d) {
+function renderAllPanels(d) {
+  const ds = getActiveDatasetId();
   document.getElementById('period-label').textContent = 'Reporting period: ' + (d.reporting_period || '');
+
+  panels.summary.data = { kpis: d.kpis, validation: d.validation };
+  panels.summary.datasetId = ds;
   renderKPIs(d.kpis);
   renderWarnings(d.validation);
-  renderMonthlyRevenue(d.monthly_revenue);
-  renderQuarterly(d.quarterly_summary);
-  renderVolume(d.monthly_volume);
-  renderSegment(d.segment_analysis);
-  renderTopHosts(d.top_hosts);
-  renderHostTypes(d.host_type_detail);
-  renderRooms(d.room_utilisation);
-  renderWeekday(d.weekday_summary);
-  renderDuration(d.duration_dist);
-  renderHeatmap(d.booking_heatmap);
-  renderPayment(d.payment_analysis);
-  renderDiscounts(d.discount_analysis);
+
+  panels.revenue.data = {
+    monthly_revenue: d.monthly_revenue,
+    quarterly_summary: d.quarterly_summary,
+    monthly_volume: d.monthly_volume,
+  };
+  panels.revenue.datasetId = ds;
+  renderRevenuePanel(panels.revenue);
+
+  panels.clients.data = {
+    segment_analysis: d.segment_analysis,
+    top_hosts: d.top_hosts,
+    host_type_detail: d.host_type_detail,
+  };
+  panels.clients.datasetId = ds;
+  renderClientsPanel(panels.clients);
+
+  panels.operations.data = {
+    room_utilisation: d.room_utilisation,
+    payment_analysis: d.payment_analysis,
+    weekday_summary: d.weekday_summary,
+    duration_dist: d.duration_dist,
+    booking_heatmap: d.booking_heatmap,
+  };
+  panels.operations.datasetId = ds;
+  renderOperationsPanel(panels.operations);
+
+  panels.discounts.data = { discount_analysis: d.discount_analysis };
+  panels.discounts.datasetId = ds;
+  renderDiscountsPanel(panels.discounts);
+
+  panels.validation.data = { validation: d.validation };
+  panels.validation.datasetId = ds;
   renderValidation(d.validation);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// KPIs
+// KPIs (summary panel — no charts, plain text nodes)
 // ─────────────────────────────────────────────────────────────────────────────
 function renderKPIs(k) {
   if (!k) return;
@@ -628,7 +708,7 @@ function renderKPIs(k) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Validation warnings
+// Validation warnings banner (summary panel)
 // ─────────────────────────────────────────────────────────────────────────────
 function renderWarnings(v) {
   const banner = document.getElementById('warnBanner');
@@ -647,11 +727,19 @@ function renderWarnings(v) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Monthly Revenue (line + bar combo)
+// Revenue panel (Monthly Revenue, Quarterly, Monthly Volume)
 // ─────────────────────────────────────────────────────────────────────────────
-function renderMonthlyRevenue(d) {
+function renderRevenuePanel(panel) {
+  panel.destroyCharts();
+  const data = panel.data || {};
+  renderMonthlyRevenue(panel, data.monthly_revenue);
+  renderQuarterly(panel, data.quarterly_summary);
+  renderVolume(panel, data.monthly_volume);
+}
+
+function renderMonthlyRevenue(panel, d) {
   if (!d || !d.labels) return;
-  new Chart(document.getElementById('chartMonthlyRevenue'), {
+  makeChart(panel, 'chartMonthlyRevenue', {
     type: 'bar',
     data: {
       labels: d.labels,
@@ -706,12 +794,9 @@ function renderMonthlyRevenue(d) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Quarterly
-// ─────────────────────────────────────────────────────────────────────────────
-function renderQuarterly(d) {
+function renderQuarterly(panel, d) {
   if (!d || !d.labels) return;
-  new Chart(document.getElementById('chartQuarterly'), {
+  makeChart(panel, 'chartQuarterly', {
     type: 'bar',
     data: {
       labels: d.labels,
@@ -731,12 +816,9 @@ function renderQuarterly(d) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Monthly Event Volume
-// ─────────────────────────────────────────────────────────────────────────────
-function renderVolume(d) {
+function renderVolume(panel, d) {
   if (!d || !d.labels) return;
-  new Chart(document.getElementById('chartVolume'), {
+  makeChart(panel, 'chartVolume', {
     type: 'line',
     data: {
       labels: d.labels,
@@ -756,17 +838,23 @@ function renderVolume(d) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Segment doughnut
+// Clients & Segments panel (Segment doughnuts, Top Hosts table, Host Types)
 // ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
+function renderClientsPanel(panel) {
+  panel.destroyCharts();
+  const data = panel.data || {};
+  renderSegment(panel, data.segment_analysis);
+  renderTopHosts(data.top_hosts);
+  renderHostTypes(panel, data.host_type_detail);
+}
+
 // Shared doughnut renderer — used for both Gross and Net segment charts so
 // the two stay visually consistent (same helper, same options, only the
 // canvas id and the values array differ).
-// ─────────────────────────────────────────────────────────────────────────────
-function renderSegmentDoughnut(canvasId, labels, values) {
+function renderSegmentDoughnut(panel, canvasId, labels, values) {
   const total = values.reduce((a, b) => a + b, 0);
   const colors = labels.map((l, i) => segmentColor(l, i));
-  new Chart(document.getElementById(canvasId), {
+  makeChart(panel, canvasId, {
     type: 'doughnut',
     data: {
       labels,
@@ -795,19 +883,23 @@ function renderSegmentDoughnut(canvasId, labels, values) {
   });
 }
 
-function renderSegment(d) {
+function renderSegment(panel, d) {
   if (!d || !d.labels) return;
-  renderSegmentDoughnut('chartSegmentGross', d.labels, d.gross);
-  renderSegmentDoughnut('chartSegmentNet',   d.labels, d.net);
+  renderSegmentDoughnut(panel, 'chartSegmentGross', d.labels, d.gross);
+  renderSegmentDoughnut(panel, 'chartSegmentNet',   d.labels, d.net);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Top Hosts ranked list
-// ─────────────────────────────────────────────────────────────────────────────
+// Top Hosts ranked list — table only, no Chart.js instance, so it re-renders
+// itself directly via its own fetch rather than going through a panel's
+// destroyCharts()/render() lifecycle.
 async function loadTopHosts() {
   const sortBy = document.getElementById('topHostsSort').value;
-  const res  = await fetch('/api/top-hosts?n=15&sort_by=' + sortBy);
+  const params = withDs(new URLSearchParams({ n: 15, sort_by: sortBy }));
+  const res  = await fetch('/api/top-hosts?' + params);
   const data = await res.json();
+  panels.clients.data = panels.clients.data || {};
+  panels.clients.data.top_hosts = data;
+  panels.clients.data.top_hosts_sort_by = sortBy;
   renderTopHosts(data, sortBy);
 }
 
@@ -830,15 +922,12 @@ function renderTopHosts(hosts, sortBy = 'net') {
   `).join('');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Host Type grouped bar
-// ─────────────────────────────────────────────────────────────────────────────
-function renderHostTypes(detail) {
+function renderHostTypes(panel, detail) {
   if (!detail || !Object.keys(detail).length) return;
   const labels   = Object.keys(detail);
   const grossVals= labels.map(l => detail[l].total);
   const setupVals= labels.map(l => detail[l].setup_count ? detail[l].setup_count.reduce((a,b)=>a+b,0) : 0);
-  new Chart(document.getElementById('chartHostTypes'), {
+  makeChart(panel, 'chartHostTypes', {
     type: 'bar',
     data: {
       labels,
@@ -860,12 +949,22 @@ function renderHostTypes(detail) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Room utilisation (horizontal bar)
+// Operations panel (Rooms, Payment, Weekday, Duration, Heatmap)
 // ─────────────────────────────────────────────────────────────────────────────
-function renderRooms(d) {
+function renderOperationsPanel(panel) {
+  panel.destroyCharts();
+  const data = panel.data || {};
+  renderRooms(panel, data.room_utilisation);
+  renderPayment(panel, data.payment_analysis);
+  renderWeekday(panel, data.weekday_summary);
+  renderDuration(panel, data.duration_dist);
+  renderHeatmap(panel, data.booking_heatmap);
+}
+
+function renderRooms(panel, d) {
   if (!d || !d.labels) return;
   const labels = d.labels.map(l => l.length > 28 ? l.slice(0,26) + '…' : l);
-  new Chart(document.getElementById('chartRooms'), {
+  makeChart(panel, 'chartRooms', {
     type: 'bar',
     data: {
       labels,
@@ -885,12 +984,9 @@ function renderRooms(d) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Weekday bar
-// ─────────────────────────────────────────────────────────────────────────────
-function renderWeekday(d) {
+function renderWeekday(panel, d) {
   if (!d || !d.labels) return;
-  new Chart(document.getElementById('chartWeekday'), {
+  makeChart(panel, 'chartWeekday', {
     type: 'bar',
     data: {
       labels: d.labels.map(l => l.slice(0,3)),
@@ -907,12 +1003,9 @@ function renderWeekday(d) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Duration histogram
-// ─────────────────────────────────────────────────────────────────────────────
-function renderDuration(d) {
+function renderDuration(panel, d) {
   if (!d || !d.labels) return;
-  new Chart(document.getElementById('chartDuration'), {
+  makeChart(panel, 'chartDuration', {
     type: 'bar',
     data: {
       labels: d.labels,
@@ -929,10 +1022,7 @@ function renderDuration(d) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Heatmap (Day × Hour)
-// ─────────────────────────────────────────────────────────────────────────────
-function renderHeatmap(d) {
+function renderHeatmap(panel, d) {
   if (!d || !d.matrix || !d.matrix.length) return;
   const data = [];
   d.days.forEach((day, di) => {
@@ -941,7 +1031,7 @@ function renderHeatmap(d) {
     });
   });
   const maxV = Math.max(...data.map(p => p.v));
-  new Chart(document.getElementById('chartHeatmap'), {
+  makeChart(panel, 'chartHeatmap', {
     type: 'matrix',
     data: {
       datasets: [{
@@ -972,12 +1062,9 @@ function renderHeatmap(d) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Payment type bar
-// ─────────────────────────────────────────────────────────────────────────────
-function renderPayment(d) {
+function renderPayment(panel, d) {
   if (!d || !d.labels) return;
-  new Chart(document.getElementById('chartPayment'), {
+  makeChart(panel, 'chartPayment', {
     type: 'bar',
     data: {
       labels: d.labels.map(l => l.length > 22 ? l.slice(0,20)+'…' : l),
@@ -998,13 +1085,19 @@ function renderPayment(d) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Discount charts
+// Discounts panel
 // ─────────────────────────────────────────────────────────────────────────────
-function renderDiscounts(d) {
+function renderDiscountsPanel(panel) {
+  panel.destroyCharts();
+  const data = panel.data || {};
+  renderDiscounts(panel, data.discount_analysis);
+}
+
+function renderDiscounts(panel, d) {
   if (!d) return;
   const seg = d.by_segment;
   if (seg && seg.labels) {
-    new Chart(document.getElementById('chartDiscSeg'), {
+    makeChart(panel, 'chartDiscSeg', {
       type: 'bar',
       data: {
         labels: seg.labels,
@@ -1016,7 +1109,7 @@ function renderDiscounts(d) {
         scales: { y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } }, x: { grid: { display: false } } },
       },
     });
-    new Chart(document.getElementById('chartDiscPct'), {
+    makeChart(panel, 'chartDiscPct', {
       type: 'bar',
       data: {
         labels: seg.labels,
@@ -1043,25 +1136,29 @@ function renderDiscounts(d) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Bookings table with pagination
+// Bookings table panel (no charts — pure DOM table + pagination)
 // ─────────────────────────────────────────────────────────────────────────────
 async function loadBookings(page = 1) {
-  currentPage = page;
+  const panel = panels.bookingsTable;
+  panel.currentPage = page;
   const q      = document.getElementById('searchInput').value;
   const seg    = document.getElementById('segFilter').value;
   const status = document.getElementById('statusFilter').value;
-  const params = new URLSearchParams({
-    page, per_page: 50, sort: tableSort.col, order: tableSort.order,
+  const params = withDs(new URLSearchParams({
+    page, per_page: 50, sort: panel.tableSort.col, order: panel.tableSort.order,
     q, segment: seg, status,
-  });
+  }));
   const res  = await fetch('/api/bookings?' + params);
   const data = await res.json();
+  panel.data = data;
+  panel.datasetId = getActiveDatasetId();
   renderBookingsTable(data);
 }
 
 function sortBy(col) {
-  if (tableSort.col === col) tableSort.order = tableSort.order === 'asc' ? 'desc' : 'asc';
-  else { tableSort.col = col; tableSort.order = 'asc'; }
+  const panel = panels.bookingsTable;
+  if (panel.tableSort.col === col) panel.tableSort.order = panel.tableSort.order === 'asc' ? 'desc' : 'asc';
+  else { panel.tableSort.col = col; panel.tableSort.order = 'asc'; }
   loadBookings(1);
 }
 
@@ -1112,7 +1209,7 @@ function renderBookingsTable(data) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Validation report panel
+// Validation report panel (no charts)
 // ─────────────────────────────────────────────────────────────────────────────
 function renderValidation(v) {
   if (!v) return;
@@ -1139,13 +1236,17 @@ function renderValidation(v) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Re-render charts on theme toggle (Chart.js bakes colors in at creation time)
+// Re-render charts on theme toggle (Chart.js bakes colors in at creation
+// time). Each chart-owning panel destroys and rebuilds only its own charts,
+// from its own cached data — no global dashData, no flat destroyAllCharts()
+// sweeping every canvas on the page.
 // ─────────────────────────────────────────────────────────────────────────────
 document.addEventListener('themechange', () => {
-  if (!dashData) return;
-  destroyAllCharts();
   setChartDefaults();
-  renderAll(dashData);
+  if (panels.revenue.data)    renderRevenuePanel(panels.revenue);
+  if (panels.clients.data)    renderClientsPanel(panels.clients);
+  if (panels.operations.data) renderOperationsPanel(panels.operations);
+  if (panels.discounts.data)  renderDiscountsPanel(panels.discounts);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
