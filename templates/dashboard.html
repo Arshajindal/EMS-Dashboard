@@ -43,7 +43,20 @@
   font-size: 1.7rem;
   font-weight: 700;
   color: var(--text);
-  line-height: 1;
+  line-height: 1.25;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .3rem;
+}
+.kpi-multi-sep { color: var(--text-muted); font-weight: 400; }
+@media (max-width: 480px) {
+  .kpi-value {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .15rem;
+  }
+  .kpi-multi-sep { display: none; }
 }
 .kpi-sub {
   font-size: .75rem;
@@ -241,6 +254,95 @@ tr:hover td { background: var(--hover-bg); }
   background: rgba(255,198,39,.15); color: var(--accent-text);
 }
 
+/* ── Compare Fiscal Years ──────────────────────────────────────── */
+.year-select-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+.year-select-card h3 {
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  margin-bottom: .85rem;
+}
+.year-row-list {
+  display: flex; flex-wrap: wrap; gap: .6rem;
+}
+.year-row {
+  display: flex; align-items: center; gap: .5rem;
+  background: var(--gray-700);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: .5rem .85rem;
+  font-size: .82rem;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.year-row.checked { border-color: var(--year-swatch, var(--gold)); }
+.year-row input[type="checkbox"] { cursor: pointer; }
+.year-row input[type="checkbox"]:disabled { cursor: not-allowed; }
+.year-row.disabled { opacity: .45; }
+.year-swatch {
+  width: 10px; height: 10px; border-radius: 50%;
+  display: inline-block;
+  background: var(--year-swatch, transparent);
+}
+.year-row-meta { color: var(--text-muted); font-size: .74rem; }
+
+/* Below ~640px the row list wraps to too many lines to stay readable —
+   collapse into a single compact multi-select instead. */
+.year-multiselect-wrap { display: none; margin-top: .5rem; }
+.year-multiselect-wrap select {
+  width: 100%;
+  background: var(--gray-700);
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: .5rem;
+  font-size: .82rem;
+  min-height: 130px;
+}
+@media (max-width: 640px) {
+  .year-row-list { display: none; }
+  .year-multiselect-wrap { display: block; }
+}
+.year-cap-msg {
+  font-size: .76rem;
+  color: var(--warning);
+  margin-top: .6rem;
+  display: none;
+}
+.year-legend {
+  display: flex; flex-wrap: wrap; gap: .9rem;
+  margin-top: .85rem;
+  padding-top: .75rem;
+  border-top: 1px solid var(--card-border);
+  font-size: .78rem;
+  color: var(--text-muted);
+}
+.year-legend .year-swatch { width: 9px; height: 9px; }
+
+/* ── Tab-local year pickers (heatmap, bookings, discounts table, validation) ── */
+.tab-year-picker-row {
+  display: flex; align-items: center; gap: .6rem;
+  margin-bottom: 1rem;
+  font-size: .78rem;
+  color: var(--text-muted);
+}
+.tab-year-picker-row select {
+  background: var(--gray-700);
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: .4rem .7rem;
+  font-size: .78rem;
+}
+
 /* ── Validation stats row ───────────────────────────────────────── */
 .val-grid {
   display: flex; flex-wrap: wrap; gap: .75rem;
@@ -267,6 +369,17 @@ tr:hover td { background: var(--hover-bg); }
   <div style="font-size:.75rem;color:var(--text-muted);">
     {% for f in source_files %}<span style="background:var(--gray-700);padding:3px 8px;border-radius:4px;margin-left:.4rem;">{{ f }}</span>{% endfor %}
   </div>
+</div>
+
+<!-- ── Compare Fiscal Years ──────────────────────────────────────────── -->
+<div class="year-select-card">
+  <h3>Compare Fiscal Years</h3>
+  <div class="year-row-list" id="yearRowList"></div>
+  <div class="year-multiselect-wrap">
+    <select id="yearMultiSelect" multiple onchange="onYearMultiSelectChange()"></select>
+  </div>
+  <div class="year-legend" id="yearLegend" style="display:none;"></div>
+  <div class="year-cap-msg" id="yearCapMsg">Maximum 4 years — uncheck one to select another.</div>
 </div>
 
 <!-- ── Validation Warning Banner ──────────────────────────────────────── -->
@@ -333,10 +446,13 @@ tr:hover td { background: var(--hover-bg); }
     <div class="chart-card">
       <div class="card-header-row">
         <h3>Top 15 Clients by Revenue</h3>
-        <select id="topHostsSort" onchange="loadTopHosts()">
-          <option value="net" selected>Net Revenue</option>
-          <option value="gross">Gross Revenue</option>
-        </select>
+        <div style="display:flex;gap:.5rem;">
+          <select id="topHostsYear" onchange="onTopHostsYearChange()"></select>
+          <select id="topHostsSort" onchange="loadTopHosts()">
+            <option value="net" selected>Net Revenue</option>
+            <option value="gross">Gross Revenue</option>
+          </select>
+        </div>
       </div>
       <div style="max-height:400px;overflow-y:auto;">
         <table class="rank-table" id="topHostsTable">
@@ -386,7 +502,12 @@ tr:hover td { background: var(--hover-bg); }
   </div>
   <div class="chart-grid single">
     <div class="chart-card">
-      <h3>Booking Activity Heatmap (Day × Hour)</h3>
+      <div class="card-header-row">
+        <h3>Booking Activity Heatmap (Day × Hour)</h3>
+        <div class="tab-year-picker-row" style="margin-bottom:1.2rem;">
+          Year: <select id="heatmapYear" onchange="onHeatmapYearChange()"></select>
+        </div>
+      </div>
       <div class="chart-wrap tall"><canvas id="chartHeatmap"></canvas></div>
     </div>
   </div>
@@ -406,7 +527,12 @@ tr:hover td { background: var(--hover-bg); }
   </div>
   <div class="chart-grid single">
     <div class="chart-card">
-      <h3>Top 10 Most Discounted Clients</h3>
+      <div class="card-header-row">
+        <h3>Top 10 Most Discounted Clients</h3>
+        <div class="tab-year-picker-row" style="margin-bottom:1.2rem;">
+          Year: <select id="discTableYear" onchange="onDiscTableYearChange()"></select>
+        </div>
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr>
@@ -423,6 +549,7 @@ tr:hover td { background: var(--hover-bg); }
 <div class="tab-panel" id="tab-bookings">
   <div class="table-card">
     <div class="table-toolbar">
+      <select id="bookingsYear" onchange="onBookingsYearChange()" style="flex:0;"></select>
       <input type="text" id="searchInput" placeholder="Search host, event, room…" oninput="debounceSearch()"/>
       <select id="segFilter" onchange="loadBookings(1)">
         <option value="">All Segments</option>
@@ -471,7 +598,12 @@ tr:hover td { background: var(--hover-bg); }
 <!-- ══ TAB: Data Quality ══════════════════════════════════════════════ -->
 <div class="tab-panel" id="tab-validation">
   <div class="chart-card">
-    <h3>Parse &amp; Validation Report</h3>
+    <div class="card-header-row">
+      <h3>Parse &amp; Validation Report</h3>
+      <div class="tab-year-picker-row" style="margin-bottom:1.2rem;">
+        Year: <select id="validationYear" onchange="onValidationYearChange()"></select>
+      </div>
+    </div>
     <div id="valReport"></div>
   </div>
 </div>
@@ -481,12 +613,279 @@ tr:hover td { background: var(--hover-bg); }
 {% block scripts %}
 <script>
 // ─────────────────────────────────────────────────────────────────────────────
-// Global state
+// Multi-year selection state. Replaces the single global dashData: each
+// checked fiscal year's /api/dashboard payload lives in dataByYear, keyed by
+// dataset_id. Selection persists in the URL's ?years= (comma-joined), written
+// via history.replaceState on every toggle so it stays shareable without
+// polluting browser history — never localStorage (shared across same-origin
+// tabs, would bleed selection between them; see CLAUDE.md) and, for this
+// selection, no sessionStorage fallback either: the URL is authoritative.
+//
+// "Primary" year = most-recently-checked. Charts that can meaningfully
+// compare years (monthly revenue, segment analysis, discount breakdown) now
+// superimpose one series per checked year, colored via yearColors, with a
+// shared legend. Charts/tables that can't (heatmap, bookings, ranked tables,
+// the validation report) instead show one year at a time via their own
+// tab-local picker, defaulting to the first checked year — see
+// reconcileTabYears() below. Everything else (Quarterly, Monthly Volume,
+// Rooms, Payment, Weekday, Duration, Host Types) still just reflects the
+// primary year, via getActiveDatasetId().
 // ─────────────────────────────────────────────────────────────────────────────
-let dashData = null;
-let tableSort = { col: 'start', order: 'asc' };
-let currentPage = 1;
+let dataByYear = new Map();
+let yearColors = {};
+let primaryYearId = null;
+let checkedYearIds = [];
+let allDatasets = [];
+
+const YEAR_PALETTE = ['#FFC627', '#3498db', '#2ecc71', '#8C1D40'];
+const MAX_YEARS = 4;
+const FISCAL_MONTHS = ['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'];
+const FISCAL_QUARTERS = ['FQ1','FQ2','FQ3','FQ4'];
+
+function assignYearColor(id) {
+  if (yearColors[id] && !Object.entries(yearColors).some(([k, v]) => k !== id && v === yearColors[id] && checkedYearIds.includes(k))) {
+    return yearColors[id];
+  }
+  const taken = new Set(checkedYearIds.filter(k => k !== id).map(k => yearColors[k]));
+  const free = YEAR_PALETTE.find(c => !taken.has(c)) || YEAR_PALETTE[0];
+  yearColors[id] = free;
+  return free;
+}
+
+function readYearsFromUrl() {
+  const raw = new URLSearchParams(window.location.search).get('years');
+  return raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
+}
+
+function writeYearsToUrl(ids) {
+  const url = new URL(window.location.href);
+  if (ids.length) url.searchParams.set('years', ids.join(','));
+  else url.searchParams.delete('years');
+  history.replaceState(null, '', url);
+}
+
+function getActiveDatasetId() {
+  return primaryYearId;
+}
+
+async function fetchYears(ids) {
+  const toFetch = ids.filter(id => !dataByYear.has(id));
+  if (!toFetch.length) return;
+  const results = await Promise.all(toFetch.map(async id => {
+    const res = await fetch('/api/dashboard?ds=' + encodeURIComponent(id));
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || ('Request failed (' + res.status + ')'));
+    }
+    return [id, await res.json()];
+  }));
+  results.forEach(([id, payload]) => dataByYear.set(id, payload));
+}
+
+function fmtDate(iso) {
+  return iso ? iso.slice(0, 10) : '—';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab-local year selection — Operations heatmap, Bookings table, the
+// Discounts tab's top-discounted ranked table, and the Data Quality tab all
+// show ONE year at a time (ranked tables and a single ValidationReport don't
+// meaningfully "superimpose"), independent of the primary year. Each defaults
+// to the first checked year and is reconciled back to it whenever its
+// current selection gets unchecked.
+// ─────────────────────────────────────────────────────────────────────────────
+let topHostsYearId = null;
+let heatmapYearId = null;
+let discTableYearId = null;
+let bookingsYearId = null;
+let validationYearId = null;
+
+function reconcileTabYears() {
+  const fallback = checkedYearIds.length ? checkedYearIds[0] : null;
+  if (!checkedYearIds.includes(topHostsYearId))   topHostsYearId   = fallback;
+  if (!checkedYearIds.includes(heatmapYearId))    heatmapYearId    = fallback;
+  if (!checkedYearIds.includes(discTableYearId))  discTableYearId  = fallback;
+  if (!checkedYearIds.includes(bookingsYearId))   bookingsYearId   = fallback;
+  if (!checkedYearIds.includes(validationYearId)) validationYearId = fallback;
+}
+
+function populateYearPicker(selectId, currentValue) {
+  const el = document.getElementById(selectId);
+  if (!el) return;
+  el.innerHTML = checkedYearIds.map(id =>
+    `<option value="${id}" ${id === currentValue ? 'selected' : ''}>${id}</option>`
+  ).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared legend for superimposed charts (one legend for the whole page, not
+// one per chart) — only shown once 2+ years are checked.
+// ─────────────────────────────────────────────────────────────────────────────
+function renderYearLegend() {
+  const el = document.getElementById('yearLegend');
+  if (checkedYearIds.length < 2) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  el.style.display = 'flex';
+  el.innerHTML = checkedYearIds.map(id => `
+    <span style="display:inline-flex;align-items:center;gap:.4rem;">
+      <span class="year-swatch" style="background:${yearColors[id] || '#999'}"></span>${id}
+    </span>
+  `).join('');
+}
+
+// Union of a per-year label list (e.g. segment names), preserving first-seen
+// order across checked years — used to align superimposed bar chart series
+// that may not share identical categories across every year.
+function unionLabels(getter) {
+  const seen = [];
+  checkedYearIds.forEach(id => {
+    const labels = getter(dataByYear.get(id));
+    (labels || []).forEach(l => { if (!seen.includes(l)) seen.push(l); });
+  });
+  return seen;
+}
+
+// One Chart.js dataset per checked year for a grouped-bar superimpose.
+// getValue(id, label) returns that year's value for a given category label
+// (0 if that year has no data for it, keeping the grouping intact rather
+// than distorting bar positions).
+function perYearBarDatasets(labels, getValue) {
+  return checkedYearIds.map(id => ({
+    label: id,
+    data: labels.map(l => getValue(id, l)),
+    backgroundColor: yearColors[id] || '#999',
+    borderWidth: 0,
+  }));
+}
+
+function renderYearCheckboxes(datasets) {
+  allDatasets = datasets;
+  const list = document.getElementById('yearRowList');
+  const atCap = checkedYearIds.length >= MAX_YEARS;
+
+  list.innerHTML = datasets.map(d => {
+    const checked = checkedYearIds.includes(d.id);
+    const disabled = !checked && atCap;
+    const color = checked ? assignYearColor(d.id) : '';
+    return `
+      <label class="year-row ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}" style="${color ? `--year-swatch:${color}` : ''}">
+        <input type="checkbox" data-id="${d.id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}
+               onchange="onYearToggle('${d.id}', this.checked)"/>
+        <span class="year-swatch"></span>
+        <span>${d.id}</span>
+        <span class="year-row-meta">${d.rows.toLocaleString()} rows · ${fmtDate(d.uploaded_at)}</span>
+      </label>
+    `;
+  }).join('');
+
+  document.getElementById('yearCapMsg').style.display = atCap ? 'block' : 'none';
+
+  // Compact multi-select shown below ~640px instead of the row list — same
+  // underlying selection, kept in sync here so both widgets always agree.
+  const multiSelect = document.getElementById('yearMultiSelect');
+  multiSelect.innerHTML = datasets.map(d => {
+    const checked = checkedYearIds.includes(d.id);
+    const disabled = !checked && atCap;
+    return `<option value="${d.id}" ${checked ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${d.id} (${d.rows.toLocaleString()} rows, ${fmtDate(d.uploaded_at)})</option>`;
+  }).join('');
+}
+
+// Native multi-select change handler for the <640px compact widget. Diffs
+// against checkedYearIds and replays each change through onYearToggle — the
+// same state-transition pipeline the checkbox rows use — so color
+// assignment, primary-year tracking, and the cap all stay identical
+// regardless of which widget the user interacted with.
+async function onYearMultiSelectChange() {
+  const select = document.getElementById('yearMultiSelect');
+  const selected = Array.from(select.selectedOptions).map(o => o.value);
+
+  if (selected.length > MAX_YEARS) {
+    showToast('Maximum ' + MAX_YEARS + ' years — deselect one first.', 'error');
+    renderYearCheckboxes(allDatasets); // revert the select's visual state
+    return;
+  }
+
+  const added   = selected.filter(id => !checkedYearIds.includes(id));
+  const removed = checkedYearIds.filter(id => !selected.includes(id));
+  for (const id of removed) { await onYearToggle(id, false); }
+  for (const id of added)   { await onYearToggle(id, true); }
+}
+
+async function onYearToggle(id, checked) {
+  if (checked) {
+    if (checkedYearIds.length >= MAX_YEARS) return;
+    checkedYearIds = checkedYearIds.filter(x => x !== id).concat(id);
+    primaryYearId = id;
+  } else {
+    checkedYearIds = checkedYearIds.filter(x => x !== id);
+    dataByYear.delete(id);
+    if (primaryYearId === id) {
+      primaryYearId = checkedYearIds.length ? checkedYearIds[checkedYearIds.length - 1] : null;
+    }
+  }
+
+  writeYearsToUrl(checkedYearIds);
+  renderYearCheckboxes(allDatasets);
+  reconcileTabYears();
+
+  if (checked) {
+    showLoading('Loading ' + id + '…');
+    try {
+      await fetchYears([id]);
+    } catch (e) {
+      hideLoading();
+      showToast('Failed to load ' + id + ': ' + e.message, 'error');
+      return;
+    }
+    hideLoading();
+  }
+
+  renderAll(dataByYear, yearColors);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-panel state — each panel (one per tab, plus the always-visible summary
+// strip) owns its own last-received data and its own Chart.js instance
+// registry. Panels are destroyed/re-rendered independently instead of one
+// global dashData blob + one flat destroyAllCharts() sweeping every canvas
+// on the page.
+// ─────────────────────────────────────────────────────────────────────────────
+function createPanel(name) {
+  return {
+    name,
+    data: null,
+    datasetId: null,
+    charts: {},
+    destroyCharts() {
+      Object.values(this.charts).forEach(c => c && c.destroy());
+      this.charts = {};
+    },
+  };
+}
+
+const panels = {
+  summary:       createPanel('summary'),
+  revenue:       createPanel('revenue'),
+  clients:       createPanel('clients'),
+  operations:    createPanel('operations'),
+  discounts:     createPanel('discounts'),
+  bookingsTable: createPanel('bookingsTable'),
+  validation:    createPanel('validation'),
+};
+panels.bookingsTable.tableSort = { col: 'start', order: 'asc' };
+panels.bookingsTable.currentPage = 1;
 let searchTimer = null;
+
+function makeChart(panel, canvasId, config) {
+  const existing = panel.charts[canvasId];
+  if (existing) existing.destroy();
+  const chart = new Chart(document.getElementById(canvasId), config);
+  panel.charts[canvasId] = chart;
+  return chart;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Chart.js global defaults (theme-aware — Chart.js bakes colors into each
@@ -512,12 +911,6 @@ function setChartDefaults() {
   Chart.defaults.plugins.tooltip.titleColor      = cssVar('--text');
   Chart.defaults.plugins.tooltip.bodyColor       = cssVar('--text');
   Chart.defaults.plugins.tooltip.footerColor     = cssVar('--text');
-}
-function destroyAllCharts() {
-  document.querySelectorAll('canvas').forEach(c => {
-    const existing = Chart.getChart(c);
-    if (existing) existing.destroy();
-  });
 }
 setChartDefaults();
 
@@ -562,8 +955,8 @@ function fmtPct(v) {
 // ─────────────────────────────────────────────────────────────────────────────
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach((b,i) => {
-    const panels = ['revenue','clients','operations','discounts','bookings','validation'];
-    b.classList.toggle('active', panels[i] === name);
+    const panelNames = ['revenue','clients','operations','discounts','bookings','validation'];
+    b.classList.toggle('active', panelNames[i] === name);
   });
   document.querySelectorAll('.tab-panel').forEach(p => {
     p.classList.toggle('active', p.id === 'tab-' + name);
@@ -574,61 +967,135 @@ function switchTab(name) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Load full dashboard data
+// Top-level render dispatcher — replaces renderAllPanels(d). Resolves the
+// primary (most-recently-checked) year's payload out of dataByYear and runs
+// the same per-panel dispatch as before; visually identical to today when
+// exactly one year is loaded. yearColors isn't consumed by any chart yet
+// (no superimposed series in this step) — it's threaded through so the next
+// step can use it without another signature change.
 // ─────────────────────────────────────────────────────────────────────────────
-async function loadDashboard() {
-  showLoading('Building charts…');
-  try {
-    const res  = await fetch('/api/dashboard');
-    dashData   = await res.json();
-    hideLoading();
-    renderAll(dashData);
-  } catch(e) {
-    hideLoading();
-    showToast('Failed to load dashboard: ' + e.message, 'error');
+function renderAll(dataByYear, yearColors) {
+  renderYearLegend();
+  populateYearPicker('topHostsYear', topHostsYearId);
+  populateYearPicker('heatmapYear', heatmapYearId);
+  populateYearPicker('discTableYear', discTableYearId);
+  populateYearPicker('bookingsYear', bookingsYearId);
+  populateYearPicker('validationYear', validationYearId);
+
+  const d = primaryYearId ? dataByYear.get(primaryYearId) : null;
+
+  if (!d) {
+    document.getElementById('period-label').textContent = 'No fiscal year selected.';
+    Object.values(panels).forEach(p => { p.destroyCharts(); p.data = null; p.datasetId = null; });
+    renderKPIs();
+    renderWarnings(null);
+    document.getElementById('topHostsBody').innerHTML = '';
+    renderDiscTable();
+    document.getElementById('bookingsBody').innerHTML = '';
+    renderValidationPanel();
+    return;
+  }
+
+  document.getElementById('period-label').textContent = 'Reporting period: ' + (d.reporting_period || '');
+
+  panels.summary.data = { kpis: d.kpis, validation: d.validation };
+  panels.summary.datasetId = primaryYearId;
+  renderKPIs();
+  renderWarnings(d.validation);
+
+  panels.revenue.data = {
+    monthly_revenue: d.monthly_revenue,
+    quarterly_summary: d.quarterly_summary,
+    monthly_volume: d.monthly_volume,
+  };
+  panels.revenue.datasetId = primaryYearId;
+  renderRevenuePanel(panels.revenue);
+
+  panels.clients.data = {
+    segment_analysis: d.segment_analysis,
+    top_hosts: d.top_hosts,
+    host_type_detail: d.host_type_detail,
+  };
+  panels.clients.datasetId = primaryYearId;
+  renderClientsPanel(panels.clients);
+
+  panels.operations.data = {
+    room_utilisation: d.room_utilisation,
+    payment_analysis: d.payment_analysis,
+    weekday_summary: d.weekday_summary,
+    duration_dist: d.duration_dist,
+  };
+  panels.operations.datasetId = primaryYearId;
+  renderOperationsPanel(panels.operations);
+  renderHeatmapPanel(panels.operations);
+
+  panels.discounts.data = { discount_analysis: d.discount_analysis };
+  panels.discounts.datasetId = primaryYearId;
+  renderDiscountsPanel(panels.discounts);
+  renderDiscTable();
+
+  panels.validation.data = { validation: d.validation };
+  panels.validation.datasetId = primaryYearId;
+  renderValidationPanel();
+
+  // Bookings table isn't part of the bulk /api/dashboard payload — only
+  // refresh it here if it's already been visited (lazy-loaded), matching
+  // switchTab()'s existing lazy-load guard. Otherwise a year switch would
+  // silently leave it showing a previous year's rows until the tab is
+  // clicked, since it fetches independently via bookingsYearId.
+  if (document.getElementById('bookingsBody').children.length) {
+    loadBookings(1);
   }
 }
 
-function renderAll(d) {
-  document.getElementById('period-label').textContent = 'Reporting period: ' + (d.reporting_period || '');
-  renderKPIs(d.kpis);
-  renderWarnings(d.validation);
-  renderMonthlyRevenue(d.monthly_revenue);
-  renderQuarterly(d.quarterly_summary);
-  renderVolume(d.monthly_volume);
-  renderSegment(d.segment_analysis);
-  renderTopHosts(d.top_hosts);
-  renderHostTypes(d.host_type_detail);
-  renderRooms(d.room_utilisation);
-  renderWeekday(d.weekday_summary);
-  renderDuration(d.duration_dist);
-  renderHeatmap(d.booking_heatmap);
-  renderPayment(d.payment_analysis);
-  renderDiscounts(d.discount_analysis);
-  renderValidation(d.validation);
+// ─────────────────────────────────────────────────────────────────────────────
+// KPIs (summary panel — no charts, plain text nodes)
+// ─────────────────────────────────────────────────────────────────────────────
+// One compact, color-coded value per checked year (e.g. "$1.2M · $1.4M"),
+// not a chart. Sub-text (discount rate, paid/internal split, etc.) stays
+// primary-year-only — cramming per-year secondary metrics into these small
+// lines would be unreadable.
+function renderKPIs() {
+  const ids = checkedYearIds;
+  if (!ids.length) {
+    ['k-gross','k-net','k-discount','k-events','k-hosts','k-avg','k-hours','k-monthly'].forEach(id => {
+      document.getElementById(id).textContent = '—';
+    });
+    ['k-discount-pct','k-paid-events','k-avg-hrs','k-months'].forEach(id => {
+      document.getElementById(id).textContent = '—';
+    });
+    return;
+  }
+
+  // Separator is its own element (not text glued between spans) so CSS can
+  // hide it when .kpi-value switches to a vertical stack below ~480px.
+  function multiValue(fmtFn, extract) {
+    return ids.map(id => {
+      const k = (dataByYear.get(id) || {}).kpis;
+      const val = k ? extract(k) : null;
+      const color = yearColors[id] || 'inherit';
+      return `<span style="color:${color}">${fmtFn(val)}</span>`;
+    }).join('<span class="kpi-multi-sep"> · </span>');
+  }
+
+  document.getElementById('k-gross').innerHTML    = multiValue(fmt$, k => k.total_gross_sales);
+  document.getElementById('k-net').innerHTML      = multiValue(fmt$, k => k.total_net_sales);
+  document.getElementById('k-discount').innerHTML = multiValue(fmt$, k => k.total_discount);
+  document.getElementById('k-events').innerHTML   = multiValue(v => (v||0).toLocaleString(), k => k.total_events);
+  document.getElementById('k-hosts').innerHTML    = multiValue(v => (v||0).toLocaleString(), k => k.total_unique_hosts);
+  document.getElementById('k-avg').innerHTML      = multiValue(fmt$, k => k.avg_gross_per_event);
+  document.getElementById('k-hours').innerHTML    = multiValue(v => (v||0).toLocaleString(), k => k.total_room_hours);
+  document.getElementById('k-monthly').innerHTML  = multiValue(fmt$, k => k.avg_monthly_gross);
+
+  const primaryK = (dataByYear.get(primaryYearId) || {}).kpis || {};
+  document.getElementById('k-discount-pct').textContent = fmtPct(primaryK.overall_discount_pct) + ' discount rate';
+  document.getElementById('k-paid-events').textContent  = (primaryK.paid_events||0).toLocaleString() + ' paid / ' + (primaryK.zero_sales_events||0) + ' internal';
+  document.getElementById('k-avg-hrs').textContent      = (primaryK.avg_event_duration_hrs||0) + ' hrs avg';
+  document.getElementById('k-months').textContent       = (primaryK.months_active||0) + ' months active';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// KPIs
-// ─────────────────────────────────────────────────────────────────────────────
-function renderKPIs(k) {
-  if (!k) return;
-  document.getElementById('k-gross').textContent   = fmt$(k.total_gross_sales);
-  document.getElementById('k-net').textContent     = fmt$(k.total_net_sales);
-  document.getElementById('k-discount').textContent= fmt$(k.total_discount);
-  document.getElementById('k-discount-pct').textContent = fmtPct(k.overall_discount_pct) + ' discount rate';
-  document.getElementById('k-events').textContent  = (k.total_events||0).toLocaleString();
-  document.getElementById('k-paid-events').textContent = (k.paid_events||0).toLocaleString() + ' paid / ' + (k.zero_sales_events||0) + ' internal';
-  document.getElementById('k-hosts').textContent   = (k.total_unique_hosts||0).toLocaleString();
-  document.getElementById('k-avg').textContent     = fmt$(k.avg_gross_per_event);
-  document.getElementById('k-hours').textContent   = (k.total_room_hours||0).toLocaleString();
-  document.getElementById('k-avg-hrs').textContent = (k.avg_event_duration_hrs||0) + ' hrs avg';
-  document.getElementById('k-monthly').textContent = fmt$(k.avg_monthly_gross);
-  document.getElementById('k-months').textContent  = (k.months_active||0) + ' months active';
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Validation warnings
+// Validation warnings banner (summary panel)
 // ─────────────────────────────────────────────────────────────────────────────
 function renderWarnings(v) {
   const banner = document.getElementById('warnBanner');
@@ -647,82 +1114,111 @@ function renderWarnings(v) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Monthly Revenue (line + bar combo)
+// Revenue panel (Monthly Revenue, Quarterly, Monthly Volume)
 // ─────────────────────────────────────────────────────────────────────────────
-function renderMonthlyRevenue(d) {
-  if (!d || !d.labels) return;
-  new Chart(document.getElementById('chartMonthlyRevenue'), {
-    type: 'bar',
-    data: {
-      labels: d.labels,
-      datasets: [
-        {
-          label: 'Gross Sales',
-          data: d.gross,
-          backgroundColor: 'rgba(255,198,39,.75)',
-          borderColor: '#FFC627',
-          borderWidth: 1,
-          order: 2,
+function renderRevenuePanel(panel) {
+  panel.destroyCharts();
+  renderMonthlyRevenue(panel);
+  renderQuarterly(panel);
+  renderVolume(panel);
+}
+
+// Single year: unchanged Gross/Net/Discount combo chart, exactly as before.
+// 2+ years: superimposed Gross-Sales-per-month line per checked year,
+// aligned by fiscal month name (Jul-Jun) rather than raw "Mon YYYY" labels,
+// since different fiscal years span different calendar years. Uses the
+// shared yearLegend instead of its own per-chart legend.
+function renderMonthlyRevenue(panel) {
+  if (checkedYearIds.length <= 1) {
+    const id = checkedYearIds[0];
+    const d = id ? (dataByYear.get(id) || {}).monthly_revenue : null;
+    if (!d || !d.labels) return;
+    makeChart(panel, 'chartMonthlyRevenue', {
+      type: 'bar',
+      data: {
+        labels: d.labels,
+        datasets: [
+          {
+            label: 'Gross Sales',
+            data: d.gross,
+            backgroundColor: 'rgba(255,198,39,.75)',
+            borderColor: '#FFC627',
+            borderWidth: 1,
+            order: 2,
+          },
+          {
+            label: 'Net Sales',
+            data: d.net,
+            backgroundColor: 'rgba(52,152,219,.65)',
+            borderColor: '#3498db',
+            borderWidth: 1,
+            order: 3,
+          },
+          {
+            label: 'Discount',
+            data: d.discount,
+            type: 'line',
+            borderColor: '#e74c3c',
+            backgroundColor: 'rgba(231,76,60,.15)',
+            borderWidth: 2,
+            pointRadius: 3,
+            fill: true,
+            tension: 0.4,
+            yAxisID: 'y',
+            order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          tooltip: {
+            callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) }
+          }
         },
-        {
-          label: 'Net Sales',
-          data: d.net,
-          backgroundColor: 'rgba(52,152,219,.65)',
-          borderColor: '#3498db',
-          borderWidth: 1,
-          order: 3,
+        scales: {
+          y: {
+            ticks: { callback: v => fmt$(v) },
+            grid: { color: gridColor() },
+          },
+          x: { grid: { display: false } },
         },
-        {
-          label: 'Discount',
-          data: d.discount,
-          type: 'line',
-          borderColor: '#e74c3c',
-          backgroundColor: 'rgba(231,76,60,.15)',
-          borderWidth: 2,
-          pointRadius: 3,
-          fill: true,
-          tension: 0.4,
-          yAxisID: 'y',
-          order: 1,
-        },
-      ],
-    },
+      },
+    });
+    return;
+  }
+
+  const datasets = checkedYearIds.map(id => {
+    const d = (dataByYear.get(id) || {}).monthly_revenue;
+    if (!d || !d.labels) return null;
+    const byMonth = {};
+    d.labels.forEach((label, i) => { byMonth[label.slice(0, 3)] = d.gross[i]; });
+    const color = yearColors[id] || '#999';
+    return {
+      label: id,
+      data: FISCAL_MONTHS.map(m => (m in byMonth) ? byMonth[m] : null),
+      borderColor: color,
+      backgroundColor: color,
+      borderWidth: 2,
+      pointRadius: 3,
+      tension: 0.35,
+      spanGaps: true,
+      fill: false,
+    };
+  }).filter(Boolean);
+  if (!datasets.length) return;
+
+  makeChart(panel, 'chartMonthlyRevenue', {
+    type: 'line',
+    data: { labels: FISCAL_MONTHS, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        tooltip: {
-          callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) }
-        }
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ' Gross: ' + fmt$(ctx.raw) } },
       },
-      scales: {
-        y: {
-          ticks: { callback: v => fmt$(v) },
-          grid: { color: gridColor() },
-        },
-        x: { grid: { display: false } },
-      },
-    },
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Quarterly
-// ─────────────────────────────────────────────────────────────────────────────
-function renderQuarterly(d) {
-  if (!d || !d.labels) return;
-  new Chart(document.getElementById('chartQuarterly'), {
-    type: 'bar',
-    data: {
-      labels: d.labels,
-      datasets: [
-        { label: 'Gross', data: d.gross, backgroundColor: 'rgba(255,198,39,.8)', borderWidth: 0 },
-        { label: 'Net',   data: d.net,   backgroundColor: 'rgba(52,152,219,.8)', borderWidth: 0 },
-      ],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) }}},
       scales: {
         y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
         x: { grid: { display: false } },
@@ -731,22 +1227,134 @@ function renderQuarterly(d) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Monthly Event Volume
-// ─────────────────────────────────────────────────────────────────────────────
-function renderVolume(d) {
-  if (!d || !d.labels) return;
-  new Chart(document.getElementById('chartVolume'), {
+// Single year: unchanged Gross/Net grouped bar. 2+ years: superimposed
+// Gross-per-quarter line per checked year, aligned by fiscal quarter
+// (FQ1-FQ4) rather than raw "FYxx FQn" labels, since quarterly_summary()
+// embeds the fiscal year in the label string the same way monthly_revenue
+// embeds the calendar year — same fix, same reasoning.
+function renderQuarterly(panel) {
+  if (checkedYearIds.length <= 1) {
+    const id = checkedYearIds[0];
+    const d = id ? (dataByYear.get(id) || {}).quarterly_summary : null;
+    if (!d || !d.labels) return;
+    makeChart(panel, 'chartQuarterly', {
+      type: 'bar',
+      data: {
+        labels: d.labels,
+        datasets: [
+          { label: 'Gross', data: d.gross, backgroundColor: 'rgba(255,198,39,.8)', borderWidth: 0 },
+          { label: 'Net',   data: d.net,   backgroundColor: 'rgba(52,152,219,.8)', borderWidth: 0 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) }}},
+        scales: {
+          y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
+          x: { grid: { display: false } },
+        },
+      },
+    });
+    return;
+  }
+
+  const datasets = checkedYearIds.map(id => {
+    const d = (dataByYear.get(id) || {}).quarterly_summary;
+    if (!d || !d.labels) return null;
+    const byQuarter = {};
+    d.labels.forEach((label, i) => { byQuarter[label.split(' ').pop()] = d.gross[i]; });
+    const color = yearColors[id] || '#999';
+    return {
+      label: id,
+      data: FISCAL_QUARTERS.map(q => (q in byQuarter) ? byQuarter[q] : null),
+      borderColor: color,
+      backgroundColor: color,
+      borderWidth: 2,
+      pointRadius: 4,
+      tension: 0.35,
+      spanGaps: true,
+      fill: false,
+    };
+  }).filter(Boolean);
+  if (!datasets.length) return;
+
+  makeChart(panel, 'chartQuarterly', {
     type: 'line',
-    data: {
-      labels: d.labels,
-      datasets: [
-        { label: 'Total Bookings', data: d.events,      borderColor: '#FFC627', backgroundColor: 'rgba(255,198,39,.1)', fill: true, tension: 0.4 },
-        { label: 'Paid Bookings',  data: d.paid_events, borderColor: '#2ecc71', backgroundColor: 'rgba(46,204,113,.1)', fill: true, tension: 0.4 },
-      ],
-    },
+    data: { labels: FISCAL_QUARTERS, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ' Gross: ' + fmt$(ctx.raw) } },
+      },
+      scales: {
+        y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+// Single year: unchanged Total/Paid line chart. 2+ years: superimposed
+// Total-Bookings-per-month line per checked year, same FISCAL_MONTHS
+// alignment as renderMonthlyRevenue (monthly_event_volume()'s labels are the
+// identical "Mon YYYY" format).
+function renderVolume(panel) {
+  if (checkedYearIds.length <= 1) {
+    const id = checkedYearIds[0];
+    const d = id ? (dataByYear.get(id) || {}).monthly_volume : null;
+    if (!d || !d.labels) return;
+    makeChart(panel, 'chartVolume', {
+      type: 'line',
+      data: {
+        labels: d.labels,
+        datasets: [
+          { label: 'Total Bookings', data: d.events,      borderColor: '#FFC627', backgroundColor: 'rgba(255,198,39,.1)', fill: true, tension: 0.4 },
+          { label: 'Paid Bookings',  data: d.paid_events, borderColor: '#2ecc71', backgroundColor: 'rgba(46,204,113,.1)', fill: true, tension: 0.4 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          y: { grid: { color: gridColor() } },
+          x: { grid: { display: false } },
+        },
+      },
+    });
+    return;
+  }
+
+  const datasets = checkedYearIds.map(id => {
+    const d = (dataByYear.get(id) || {}).monthly_volume;
+    if (!d || !d.labels) return null;
+    const byMonth = {};
+    d.labels.forEach((label, i) => { byMonth[label.slice(0, 3)] = d.events[i]; });
+    const color = yearColors[id] || '#999';
+    return {
+      label: id,
+      data: FISCAL_MONTHS.map(m => (m in byMonth) ? byMonth[m] : null),
+      borderColor: color,
+      backgroundColor: color,
+      borderWidth: 2,
+      pointRadius: 3,
+      tension: 0.35,
+      spanGaps: true,
+      fill: false,
+    };
+  }).filter(Boolean);
+  if (!datasets.length) return;
+
+  makeChart(panel, 'chartVolume', {
+    type: 'line',
+    data: { labels: FISCAL_MONTHS, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + ctx.raw } },
+      },
       scales: {
         y: { grid: { color: gridColor() } },
         x: { grid: { display: false } },
@@ -756,17 +1364,22 @@ function renderVolume(d) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Segment doughnut
+// Clients & Segments panel (Segment doughnuts, Top Hosts table, Host Types)
 // ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
+function renderClientsPanel(panel) {
+  panel.destroyCharts();
+  renderSegment(panel);
+  renderHostTypes(panel);
+  loadTopHosts();
+}
+
 // Shared doughnut renderer — used for both Gross and Net segment charts so
 // the two stay visually consistent (same helper, same options, only the
 // canvas id and the values array differ).
-// ─────────────────────────────────────────────────────────────────────────────
-function renderSegmentDoughnut(canvasId, labels, values) {
+function renderSegmentDoughnut(panel, canvasId, labels, values) {
   const total = values.reduce((a, b) => a + b, 0);
   const colors = labels.map((l, i) => segmentColor(l, i));
-  new Chart(document.getElementById(canvasId), {
+  makeChart(panel, canvasId, {
     type: 'doughnut',
     data: {
       labels,
@@ -795,20 +1408,72 @@ function renderSegmentDoughnut(canvasId, labels, values) {
   });
 }
 
-function renderSegment(d) {
-  if (!d || !d.labels) return;
-  renderSegmentDoughnut('chartSegmentGross', d.labels, d.gross);
-  renderSegmentDoughnut('chartSegmentNet',   d.labels, d.net);
+// Single year: unchanged doughnuts. 2+ years: switches to a grouped bar
+// chart per segment (doughnuts show parts-of-a-whole for one year; they
+// don't superimpose meaningfully across years the way a bar chart can).
+function renderSegment(panel) {
+  if (!checkedYearIds.length) return;
+  if (checkedYearIds.length === 1) {
+    const d = (dataByYear.get(checkedYearIds[0]) || {}).segment_analysis;
+    if (!d || !d.labels) return;
+    renderSegmentDoughnut(panel, 'chartSegmentGross', d.labels, d.gross);
+    renderSegmentDoughnut(panel, 'chartSegmentNet',   d.labels, d.net);
+    return;
+  }
+  const labels = unionLabels(dy => (dy && dy.segment_analysis) ? dy.segment_analysis.labels : null);
+  if (!labels.length) return;
+  renderSegmentGroupedBar(panel, 'chartSegmentGross', labels, 'gross');
+  renderSegmentGroupedBar(panel, 'chartSegmentNet',   labels, 'net');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Top Hosts ranked list
-// ─────────────────────────────────────────────────────────────────────────────
+function renderSegmentGroupedBar(panel, canvasId, labels, metric) {
+  const datasets = checkedYearIds.map(id => {
+    const sa = (dataByYear.get(id) || {}).segment_analysis;
+    const byLabel = {};
+    if (sa && sa.labels) sa.labels.forEach((l, i) => { byLabel[l] = sa[metric][i]; });
+    const color = yearColors[id] || '#999';
+    return {
+      label: id,
+      data: labels.map(l => (l in byLabel) ? byLabel[l] : 0),
+      backgroundColor: color,
+      borderWidth: 0,
+    };
+  });
+  makeChart(panel, canvasId, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) } },
+      },
+      scales: {
+        y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+// Top Hosts ranked list — a ranked table, not a chart, so it doesn't
+// superimpose either; it shows one year at a time via its own picker
+// (topHostsYearId), independent of the primary year and re-fetched directly
+// (its data isn't cached per-year the way the bulk /api/dashboard payload
+// pieces are, since the sort-by dropdown needs a live query anyway).
 async function loadTopHosts() {
+  const ds = topHostsYearId || getActiveDatasetId();
+  if (!ds) { document.getElementById('topHostsBody').innerHTML = ''; return; }
   const sortBy = document.getElementById('topHostsSort').value;
-  const res  = await fetch('/api/top-hosts?n=15&sort_by=' + sortBy);
+  const params = new URLSearchParams({ n: 15, sort_by: sortBy, ds });
+  const res  = await fetch('/api/top-hosts?' + params);
   const data = await res.json();
   renderTopHosts(data, sortBy);
+}
+
+function onTopHostsYearChange() {
+  topHostsYearId = document.getElementById('topHostsYear').value;
+  loadTopHosts();
 }
 
 function renderTopHosts(hosts, sortBy = 'net') {
@@ -830,75 +1495,59 @@ function renderTopHosts(hosts, sortBy = 'net') {
   `).join('');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Host Type grouped bar
-// ─────────────────────────────────────────────────────────────────────────────
-function renderHostTypes(detail) {
-  if (!detail || !Object.keys(detail).length) return;
-  const labels   = Object.keys(detail);
-  const grossVals= labels.map(l => detail[l].total);
-  const setupVals= labels.map(l => detail[l].setup_count ? detail[l].setup_count.reduce((a,b)=>a+b,0) : 0);
-  new Chart(document.getElementById('chartHostTypes'), {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Gross Sales', data: grossVals, backgroundColor: PALETTE.slice(0,4), borderWidth: 0, yAxisID: 'y' },
-        { label: 'Setup Count', data: setupVals, backgroundColor: cssVar('--text'), borderWidth: 0, yAxisID: 'y2', type: 'line', borderColor: cssVar('--text'), pointRadius: 5, tension: 0 },
-      ],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      scales: {
-        y:  { position: 'left',  ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
-        y2: { position: 'right', ticks: { callback: v => v.toLocaleString() }, grid: { display: false } },
-        x:  { grid: { display: false } },
+// Single year: unchanged Gross Sales bar + Setup Count line combo. 2+
+// years: grouped Gross-Sales-only bar per year (Setup Count is a per-host
+// operational count, not a revenue comparison — no obvious per-year overlay
+// meaning, so it's dropped in multi-year mode). host_type_detail's payload
+// is a dict keyed by host_type name, not a labels array like the other
+// charts, so the union getter reads Object.keys() instead of .labels.
+function renderHostTypes(panel) {
+  if (checkedYearIds.length <= 1) {
+    const id = checkedYearIds[0];
+    const detail = id ? (dataByYear.get(id) || {}).host_type_detail : null;
+    if (!detail || !Object.keys(detail).length) return;
+    const labels    = Object.keys(detail);
+    const grossVals = labels.map(l => detail[l].total);
+    const setupVals = labels.map(l => detail[l].setup_count ? detail[l].setup_count.reduce((a,b)=>a+b,0) : 0);
+    makeChart(panel, 'chartHostTypes', {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Gross Sales', data: grossVals, backgroundColor: PALETTE.slice(0,4), borderWidth: 0, yAxisID: 'y' },
+          { label: 'Setup Count', data: setupVals, backgroundColor: cssVar('--text'), borderWidth: 0, yAxisID: 'y2', type: 'line', borderColor: cssVar('--text'), pointRadius: 5, tension: 0 },
+        ],
       },
-      plugins: { tooltip: { callbacks: { label: ctx => ctx.dataset.label === 'Gross Sales' ? ' ' + fmt$(ctx.raw) : ' ' + ctx.raw + ' setups' }}},
-    },
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Room utilisation (horizontal bar)
-// ─────────────────────────────────────────────────────────────────────────────
-function renderRooms(d) {
-  if (!d || !d.labels) return;
-  const labels = d.labels.map(l => l.length > 28 ? l.slice(0,26) + '…' : l);
-  new Chart(document.getElementById('chartRooms'), {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Bookings', data: d.bookings, backgroundColor: 'rgba(255,198,39,.75)', borderWidth: 0 },
-      ],
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { color: gridColor() } },
-        y: { grid: { display: false }, ticks: { font: { size: 10 } } },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          y:  { position: 'left',  ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
+          y2: { position: 'right', ticks: { callback: v => v.toLocaleString() }, grid: { display: false } },
+          x:  { grid: { display: false } },
+        },
+        plugins: { tooltip: { callbacks: { label: ctx => ctx.dataset.label === 'Gross Sales' ? ' ' + fmt$(ctx.raw) : ' ' + ctx.raw + ' setups' }}},
       },
-    },
-  });
-}
+    });
+    return;
+  }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Weekday bar
-// ─────────────────────────────────────────────────────────────────────────────
-function renderWeekday(d) {
-  if (!d || !d.labels) return;
-  new Chart(document.getElementById('chartWeekday'), {
+  const labels = unionLabels(dy => (dy && dy.host_type_detail) ? Object.keys(dy.host_type_detail) : null);
+  if (!labels.length) return;
+
+  const datasets = perYearBarDatasets(labels, (id, l) => {
+    const detail = (dataByYear.get(id) || {}).host_type_detail;
+    return (detail && detail[l]) ? detail[l].total : 0;
+  });
+
+  makeChart(panel, 'chartHostTypes', {
     type: 'bar',
-    data: {
-      labels: d.labels.map(l => l.slice(0,3)),
-      datasets: [{ label: 'Total Gross', data: d.total_gross, backgroundColor: PALETTE, borderWidth: 0 }],
-    },
+    data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' Total: ' + fmt$(ctx.raw) }}},
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) } },
+      },
       scales: {
         y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
         x: { grid: { display: false } },
@@ -908,19 +1557,191 @@ function renderWeekday(d) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Duration histogram
+// Operations panel (Rooms, Payment, Weekday, Duration, Heatmap)
 // ─────────────────────────────────────────────────────────────────────────────
-function renderDuration(d) {
-  if (!d || !d.labels) return;
-  new Chart(document.getElementById('chartDuration'), {
+function renderOperationsPanel(panel) {
+  panel.destroyCharts();
+  renderRooms(panel);
+  renderPayment(panel);
+  renderWeekday(panel);
+  renderDuration(panel);
+}
+
+// Heatmap doesn't superimpose (a day×hour matrix has no sensible way to
+// overlay multiple years) — shows one year at a time via heatmapYearId,
+// independent of the primary year. Called separately from
+// renderOperationsPanel (not folded into panel.destroyCharts() there) so a
+// heatmap-only year change doesn't tear down Rooms/Payment/Weekday/Duration.
+function renderHeatmapPanel(panel) {
+  const ds = heatmapYearId;
+  const d = ds ? (dataByYear.get(ds) || {}).booking_heatmap : null;
+  renderHeatmap(panel, d);
+}
+
+function onHeatmapYearChange() {
+  heatmapYearId = document.getElementById('heatmapYear').value;
+  renderHeatmapPanel(panels.operations);
+}
+
+// Single year: unchanged single-series horizontal bar. 2+ years:
+// unionLabels() on full (untruncated) room names so two different real
+// names can't collide after truncation, grouped bar per year on booking
+// counts, truncated only for display on the final aligned label list.
+function renderRooms(panel) {
+  if (checkedYearIds.length <= 1) {
+    const id = checkedYearIds[0];
+    const d = id ? (dataByYear.get(id) || {}).room_utilisation : null;
+    if (!d || !d.labels) return;
+    const labels = d.labels.map(l => l.length > 28 ? l.slice(0,26) + '…' : l);
+    makeChart(panel, 'chartRooms', {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Bookings', data: d.bookings, backgroundColor: 'rgba(255,198,39,.75)', borderWidth: 0 },
+        ],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: gridColor() } },
+          y: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        },
+      },
+    });
+    return;
+  }
+
+  const fullLabels = unionLabels(dy => (dy && dy.room_utilisation) ? dy.room_utilisation.labels : null);
+  if (!fullLabels.length) return;
+  const displayLabels = fullLabels.map(l => l.length > 28 ? l.slice(0,26) + '…' : l);
+
+  const datasets = perYearBarDatasets(fullLabels, (id, l) => {
+    const d = (dataByYear.get(id) || {}).room_utilisation;
+    if (!d || !d.labels) return 0;
+    const i = d.labels.indexOf(l);
+    return i === -1 ? 0 : d.bookings[i];
+  });
+
+  makeChart(panel, 'chartRooms', {
     type: 'bar',
-    data: {
-      labels: d.labels,
-      datasets: [{ label: 'Events', data: d.counts, backgroundColor: 'rgba(52,152,219,.8)', borderWidth: 0 }],
+    data: { labels: displayLabels, datasets },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + ctx.raw } },
+      },
+      scales: {
+        x: { grid: { color: gridColor() } },
+        y: { grid: { display: false }, ticks: { font: { size: 10 } } },
+      },
     },
+  });
+}
+
+// Single year: unchanged. 2+ years: no unionLabels needed — weekday_summary()
+// always reindexes to the same 7 days in the same order (analytics.py), so
+// every checked year's labels are guaranteed identical already.
+function renderWeekday(panel) {
+  if (checkedYearIds.length <= 1) {
+    const id = checkedYearIds[0];
+    const d = id ? (dataByYear.get(id) || {}).weekday_summary : null;
+    if (!d || !d.labels) return;
+    makeChart(panel, 'chartWeekday', {
+      type: 'bar',
+      data: {
+        labels: d.labels.map(l => l.slice(0,3)),
+        datasets: [{ label: 'Total Gross', data: d.total_gross, backgroundColor: PALETTE, borderWidth: 0 }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' Total: ' + fmt$(ctx.raw) }}},
+        scales: {
+          y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
+          x: { grid: { display: false } },
+        },
+      },
+    });
+    return;
+  }
+
+  const first = (dataByYear.get(checkedYearIds[0]) || {}).weekday_summary;
+  if (!first || !first.labels) return;
+  const labels = first.labels.map(l => l.slice(0,3));
+
+  const datasets = perYearBarDatasets(first.labels, (id, l) => {
+    const d = (dataByYear.get(id) || {}).weekday_summary;
+    if (!d || !d.labels) return 0;
+    const i = d.labels.indexOf(l);
+    return i === -1 ? 0 : d.total_gross[i];
+  });
+
+  makeChart(panel, 'chartWeekday', {
+    type: 'bar',
+    data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) } },
+      },
+      scales: {
+        y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+// Single year: unchanged. 2+ years: same "no unionLabels needed" reasoning
+// as Weekday — duration_distribution()'s bins are hardcoded constants
+// (analytics.py), identical for every dataset.
+function renderDuration(panel) {
+  if (checkedYearIds.length <= 1) {
+    const id = checkedYearIds[0];
+    const d = id ? (dataByYear.get(id) || {}).duration_dist : null;
+    if (!d || !d.labels) return;
+    makeChart(panel, 'chartDuration', {
+      type: 'bar',
+      data: {
+        labels: d.labels,
+        datasets: [{ label: 'Events', data: d.counts, backgroundColor: 'rgba(52,152,219,.8)', borderWidth: 0 }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { grid: { color: gridColor() } },
+          x: { grid: { display: false } },
+        },
+      },
+    });
+    return;
+  }
+
+  const first = (dataByYear.get(checkedYearIds[0]) || {}).duration_dist;
+  if (!first || !first.labels) return;
+
+  const datasets = perYearBarDatasets(first.labels, (id, l) => {
+    const d = (dataByYear.get(id) || {}).duration_dist;
+    if (!d || !d.labels) return 0;
+    const i = d.labels.indexOf(l);
+    return i === -1 ? 0 : d.counts[i];
+  });
+
+  makeChart(panel, 'chartDuration', {
+    type: 'bar',
+    data: { labels: first.labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + ctx.raw } },
+      },
       scales: {
         y: { grid: { color: gridColor() } },
         x: { grid: { display: false } },
@@ -929,10 +1750,7 @@ function renderDuration(d) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Heatmap (Day × Hour)
-// ─────────────────────────────────────────────────────────────────────────────
-function renderHeatmap(d) {
+function renderHeatmap(panel, d) {
   if (!d || !d.matrix || !d.matrix.length) return;
   const data = [];
   d.days.forEach((day, di) => {
@@ -941,7 +1759,7 @@ function renderHeatmap(d) {
     });
   });
   const maxV = Math.max(...data.map(p => p.v));
-  new Chart(document.getElementById('chartHeatmap'), {
+  makeChart(panel, 'chartHeatmap', {
     type: 'matrix',
     data: {
       datasets: [{
@@ -972,23 +1790,56 @@ function renderHeatmap(d) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Payment type bar
-// ─────────────────────────────────────────────────────────────────────────────
-function renderPayment(d) {
-  if (!d || !d.labels) return;
-  new Chart(document.getElementById('chartPayment'), {
+// Single year: unchanged Gross+Net grouped bar. 2+ years: unionLabels() on
+// full (untruncated) payment-type names, grouped bar per year on Gross only
+// (same "pick the one metric" choice as the other multi-metric charts),
+// truncated only for display on the final aligned label list.
+function renderPayment(panel) {
+  if (checkedYearIds.length <= 1) {
+    const id = checkedYearIds[0];
+    const d = id ? (dataByYear.get(id) || {}).payment_analysis : null;
+    if (!d || !d.labels) return;
+    makeChart(panel, 'chartPayment', {
+      type: 'bar',
+      data: {
+        labels: d.labels.map(l => l.length > 22 ? l.slice(0,20)+'…' : l),
+        datasets: [
+          { label: 'Gross', data: d.gross, backgroundColor: 'rgba(255,198,39,.8)', borderWidth: 0 },
+          { label: 'Net',   data: d.net,   backgroundColor: 'rgba(52,152,219,.7)', borderWidth: 0 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) }}},
+        scales: {
+          y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
+          x: { grid: { display: false } },
+        },
+      },
+    });
+    return;
+  }
+
+  const fullLabels = unionLabels(dy => (dy && dy.payment_analysis) ? dy.payment_analysis.labels : null);
+  if (!fullLabels.length) return;
+  const displayLabels = fullLabels.map(l => l.length > 22 ? l.slice(0,20)+'…' : l);
+
+  const datasets = perYearBarDatasets(fullLabels, (id, l) => {
+    const d = (dataByYear.get(id) || {}).payment_analysis;
+    if (!d || !d.labels) return 0;
+    const i = d.labels.indexOf(l);
+    return i === -1 ? 0 : d.gross[i];
+  });
+
+  makeChart(panel, 'chartPayment', {
     type: 'bar',
-    data: {
-      labels: d.labels.map(l => l.length > 22 ? l.slice(0,20)+'…' : l),
-      datasets: [
-        { label: 'Gross', data: d.gross, backgroundColor: 'rgba(255,198,39,.8)', borderWidth: 0 },
-        { label: 'Net',   data: d.net,   backgroundColor: 'rgba(52,152,219,.7)', borderWidth: 0 },
-      ],
-    },
+    data: { labels: displayLabels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) }}},
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) } },
+      },
       scales: {
         y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } },
         x: { grid: { display: false } },
@@ -998,13 +1849,25 @@ function renderPayment(d) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Discount charts
+// Discounts panel
 // ─────────────────────────────────────────────────────────────────────────────
-function renderDiscounts(d) {
-  if (!d) return;
-  const seg = d.by_segment;
-  if (seg && seg.labels) {
-    new Chart(document.getElementById('chartDiscSeg'), {
+function renderDiscountsPanel(panel) {
+  panel.destroyCharts();
+  renderDiscountCharts(panel);
+}
+
+// Single year: unchanged single-series bars. 2+ years: one bar-series per
+// checked year, grouped by segment, aligned via unionLabels (a segment
+// missing from a given year's data shows as 0 for that year rather than
+// distorting the grouping).
+function renderDiscountCharts(panel) {
+  if (!checkedYearIds.length) return;
+
+  if (checkedYearIds.length === 1) {
+    const d = (dataByYear.get(checkedYearIds[0]) || {}).discount_analysis;
+    const seg = d && d.by_segment;
+    if (!seg || !seg.labels) return;
+    makeChart(panel, 'chartDiscSeg', {
       type: 'bar',
       data: {
         labels: seg.labels,
@@ -1016,7 +1879,7 @@ function renderDiscounts(d) {
         scales: { y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } }, x: { grid: { display: false } } },
       },
     });
-    new Chart(document.getElementById('chartDiscPct'), {
+    makeChart(panel, 'chartDiscPct', {
       type: 'bar',
       data: {
         labels: seg.labels,
@@ -1028,40 +1891,100 @@ function renderDiscounts(d) {
         scales: { y: { ticks: { callback: v => v + '%' }, grid: { color: gridColor() } }, x: { grid: { display: false } } },
       },
     });
+    return;
   }
-  if (d.top_discounted && d.top_discounted.length) {
-    document.getElementById('discTable').innerHTML = d.top_discounted.map(r => `
-      <tr>
-        <td>${r.host}</td>
-        <td class="money">${fmt$(r.gross)}</td>
-        <td class="money">${fmt$(r.net)}</td>
-        <td class="money-red">${fmt$(r.discount)}</td>
-        <td>${fmtPct(r.avg_pct)}</td>
-      </tr>
-    `).join('');
+
+  const labels = unionLabels(dy =>
+    (dy && dy.discount_analysis && dy.discount_analysis.by_segment) ? dy.discount_analysis.by_segment.labels : null
+  );
+  if (!labels.length) return;
+
+  function valueFor(metric) {
+    return (id, l) => {
+      const seg = ((dataByYear.get(id) || {}).discount_analysis || {}).by_segment;
+      const byLabel = {};
+      if (seg && seg.labels) seg.labels.forEach((ll, i) => { byLabel[ll] = seg[metric][i]; });
+      return (l in byLabel) ? byLabel[l] : 0;
+    };
   }
+
+  makeChart(panel, 'chartDiscSeg', {
+    type: 'bar',
+    data: { labels, datasets: perYearBarDatasets(labels, valueFor('total_discount')) },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt$(ctx.raw) }}},
+      scales: { y: { ticks: { callback: v => fmt$(v) }, grid: { color: gridColor() } }, x: { grid: { display: false } } },
+    },
+  });
+  makeChart(panel, 'chartDiscPct', {
+    type: 'bar',
+    data: { labels, datasets: perYearBarDatasets(labels, valueFor('avg_discount_pct')) },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + ctx.raw.toFixed(1) + '%' }}},
+      scales: { y: { ticks: { callback: v => v + '%' }, grid: { color: gridColor() } }, x: { grid: { display: false } } },
+    },
+  });
+}
+
+// Top-discounted ranked table — same "ranked table, not a chart" rule as Top
+// Hosts: shows one year at a time via discTableYearId, no independent
+// fetch needed since discount_analysis is already cached per checked year.
+function renderDiscTable() {
+  const ds = discTableYearId;
+  const d = ds ? (dataByYear.get(ds) || {}).discount_analysis : null;
+  const rows = d && d.top_discounted ? d.top_discounted : [];
+  document.getElementById('discTable').innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.host}</td>
+      <td class="money">${fmt$(r.gross)}</td>
+      <td class="money">${fmt$(r.net)}</td>
+      <td class="money-red">${fmt$(r.discount)}</td>
+      <td>${fmtPct(r.avg_pct)}</td>
+    </tr>
+  `).join('');
+}
+
+function onDiscTableYearChange() {
+  discTableYearId = document.getElementById('discTableYear').value;
+  renderDiscTable();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Bookings table with pagination
+// Bookings table panel (no charts — pure DOM table + pagination)
 // ─────────────────────────────────────────────────────────────────────────────
+// Bookings table doesn't superimpose — search/filter/sort/paginate stays
+// scoped to one year at a time via bookingsYearId, independent of the
+// primary year.
 async function loadBookings(page = 1) {
-  currentPage = page;
+  const ds = bookingsYearId || getActiveDatasetId();
+  if (!ds) { document.getElementById('bookingsBody').innerHTML = ''; return; }
+  const panel = panels.bookingsTable;
+  panel.currentPage = page;
   const q      = document.getElementById('searchInput').value;
   const seg    = document.getElementById('segFilter').value;
   const status = document.getElementById('statusFilter').value;
   const params = new URLSearchParams({
-    page, per_page: 50, sort: tableSort.col, order: tableSort.order,
-    q, segment: seg, status,
+    page, per_page: 50, sort: panel.tableSort.col, order: panel.tableSort.order,
+    q, segment: seg, status, ds,
   });
   const res  = await fetch('/api/bookings?' + params);
   const data = await res.json();
+  panel.data = data;
+  panel.datasetId = ds;
   renderBookingsTable(data);
 }
 
+function onBookingsYearChange() {
+  bookingsYearId = document.getElementById('bookingsYear').value;
+  loadBookings(1);
+}
+
 function sortBy(col) {
-  if (tableSort.col === col) tableSort.order = tableSort.order === 'asc' ? 'desc' : 'asc';
-  else { tableSort.col = col; tableSort.order = 'asc'; }
+  const panel = panels.bookingsTable;
+  if (panel.tableSort.col === col) panel.tableSort.order = panel.tableSort.order === 'asc' ? 'desc' : 'asc';
+  else { panel.tableSort.col = col; panel.tableSort.order = 'asc'; }
   loadBookings(1);
 }
 
@@ -1112,11 +2035,11 @@ function renderBookingsTable(data) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Validation report panel
+// Validation report panel (no charts)
 // ─────────────────────────────────────────────────────────────────────────────
 function renderValidation(v) {
-  if (!v) return;
   const el = document.getElementById('valReport');
+  if (!v) { el.innerHTML = ''; return; }
   el.innerHTML = `
     <div class="val-grid">
       <div class="val-item"><strong>${(v.total_rows_raw||0).toLocaleString()}</strong><span>Raw Rows Read</span></div>
@@ -1138,19 +2061,63 @@ function renderValidation(v) {
   `;
 }
 
+// Data Quality tab shows one ValidationReport at a time via validationYearId
+// — a report is inherently about one parse of one year's files, doesn't
+// superimpose.
+function renderValidationPanel() {
+  const ds = validationYearId;
+  const d = ds ? (dataByYear.get(ds) || {}).validation : null;
+  renderValidation(d);
+}
+
+function onValidationYearChange() {
+  validationYearId = document.getElementById('validationYear').value;
+  renderValidationPanel();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Re-render charts on theme toggle (Chart.js bakes colors in at creation time)
+// Re-render charts on theme toggle (Chart.js bakes colors in at creation
+// time). Each chart-owning panel destroys and rebuilds only its own charts,
+// from its own cached data — no global dashData, no flat destroyAllCharts()
+// sweeping every canvas on the page.
 // ─────────────────────────────────────────────────────────────────────────────
 document.addEventListener('themechange', () => {
-  if (!dashData) return;
-  destroyAllCharts();
   setChartDefaults();
-  renderAll(dashData);
+  if (panels.revenue.data)    renderRevenuePanel(panels.revenue);
+  if (panels.clients.data)    renderClientsPanel(panels.clients);
+  if (panels.operations.data) { renderOperationsPanel(panels.operations); renderHeatmapPanel(panels.operations); }
+  if (panels.discounts.data)  renderDiscountsPanel(panels.discounts);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Init
+// Init — fetch the dataset list once, restore selection from ?years= (or
+// default to the single most-recent dataset), fetch every initially-checked
+// year in parallel, then render.
 // ─────────────────────────────────────────────────────────────────────────────
-loadDashboard();
+async function initDashboard() {
+  showLoading('Loading fiscal years…');
+  try {
+    const res = await fetch('/api/datasets');
+    if (!res.ok) throw new Error('Failed to load dataset list (' + res.status + ')');
+    const datasets = await res.json();
+
+    const fromUrl = readYearsFromUrl().filter(id => datasets.some(d => d.id === id));
+    checkedYearIds = fromUrl.length ? fromUrl.slice(0, MAX_YEARS) : (datasets.length ? [datasets[0].id] : []);
+    primaryYearId = checkedYearIds.length ? checkedYearIds[checkedYearIds.length - 1] : null;
+
+    renderYearCheckboxes(datasets);
+    writeYearsToUrl(checkedYearIds);
+    reconcileTabYears();
+
+    await fetchYears(checkedYearIds);
+    hideLoading();
+    renderAll(dataByYear, yearColors);
+  } catch (e) {
+    hideLoading();
+    showToast('Failed to load dashboard: ' + e.message, 'error');
+  }
+}
+
+initDashboard();
 </script>
 {% endblock %}

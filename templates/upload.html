@@ -160,6 +160,50 @@
   width: 0%;
   transition: width .3s;
 }
+
+/* Confirm card (shown after preview, before persisting) */
+.confirm-card {
+  display: none;
+  background: var(--gray-700);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin: 1rem 0;
+}
+.confirm-card label {
+  display: block;
+  font-size: .78rem;
+  color: var(--text-muted);
+  margin-bottom: .4rem;
+}
+.confirm-card input[type="text"] {
+  width: 100%;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: .6rem .85rem;
+  font-size: .9rem;
+  font-weight: 600;
+  margin-bottom: .5rem;
+}
+.confirm-card input[type="text"]:focus { outline: none; border-color: var(--gold); }
+.confirm-card .confirm-meta {
+  font-size: .78rem;
+  color: var(--text-muted);
+  margin-bottom: .75rem;
+}
+.overwrite-warning {
+  background: rgba(243,156,18,.12);
+  border: 1px solid rgba(243,156,18,.35);
+  border-radius: 8px;
+  padding: .75rem 1rem;
+  font-size: .82rem;
+  color: var(--warning);
+  margin-bottom: .75rem;
+}
+.confirm-actions { display: flex; gap: .75rem; }
+.confirm-actions .btn-primary,
+.confirm-actions .btn-secondary { margin-top: 0; }
 </style>
 {% endblock %}
 
@@ -197,12 +241,24 @@
       <div class="progress-bar-fill" id="progressBar"></div>
     </div>
 
+    <!-- Confirm card (shown after a successful preview) -->
+    <div class="confirm-card" id="confirmCard">
+      <div id="overwriteWarning" class="overwrite-warning" style="display:none;"></div>
+      <label for="datasetIdInput">Detected fiscal year — edit if needed before saving</label>
+      <input type="text" id="datasetIdInput"/>
+      <div class="confirm-meta" id="confirmMeta"></div>
+      <div class="confirm-actions">
+        <button class="btn-primary" id="confirmBtn" onclick="confirmUpload()">Confirm &amp; Save</button>
+        <button class="btn-secondary" onclick="cancelUpload()">Cancel</button>
+      </div>
+    </div>
+
     <!-- Upload button -->
     <button class="btn-primary" id="uploadBtn" disabled onclick="uploadFiles()">
       Upload &amp; Analyse
     </button>
 
-    <button class="btn-secondary" onclick="loadDemo()">
+    <button class="btn-secondary" id="demoBtn" onclick="loadDemo()">
       ⚡ Load Demo Data (pre-loaded EMS files)
     </button>
   </div>
@@ -215,13 +271,20 @@ const dropZone   = document.getElementById('dropZone');
 const fileInput  = document.getElementById('fileInput');
 const fileList   = document.getElementById('fileList');
 const uploadBtn  = document.getElementById('uploadBtn');
+const demoBtn    = document.getElementById('demoBtn');
 const progressWrap = document.getElementById('progressWrap');
 const progressBar  = document.getElementById('progressBar');
 const dropZoneTitle = document.getElementById('dropZoneTitle');
 const dropZoneHint  = document.getElementById('dropZoneHint');
+const confirmCard   = document.getElementById('confirmCard');
+const datasetIdInput = document.getElementById('datasetIdInput');
+const confirmMeta    = document.getElementById('confirmMeta');
+const overwriteWarning = document.getElementById('overwriteWarning');
+const confirmBtn     = document.getElementById('confirmBtn');
 
 const MAX_FILES = 3;
 let selectedFiles = [];
+let pendingBatchId = null;
 
 function detectRole(name) {
   const n = name.toLowerCase();
@@ -323,11 +386,12 @@ async function uploadFiles() {
     const data = await res.json();
     clearInterval(timer);
     progressBar.style.width = '100%';
+    hideLoading();
 
     if (!res.ok) {
-      hideLoading();
       showToast('Error: ' + (data.error || 'Upload failed'), 'error', 6000);
       uploadBtn.disabled = false;
+      progressWrap.style.display = 'none';
       return;
     }
 
@@ -335,14 +399,79 @@ async function uploadFiles() {
       console.warn('Validation warnings:', data.warnings);
     }
 
-    showToast(`✅ Loaded ${data.rows_parsed} bookings – redirecting…`, 'success');
-    setTimeout(() => { window.location = data.redirect; }, 1000);
+    showPreview(data);
   } catch (err) {
     clearInterval(timer);
     hideLoading();
     showToast('Network error: ' + err.message, 'error');
     uploadBtn.disabled = false;
+    progressWrap.style.display = 'none';
   }
+}
+
+function showPreview(data) {
+  pendingBatchId = data.batch_id;
+  datasetIdInput.value = data.detected_dataset_id;
+  confirmMeta.textContent = `Detected reporting period: ${data.reporting_period} — ${data.row_count.toLocaleString()} bookings parsed.`;
+
+  if (data.key_exists) {
+    overwriteWarning.style.display = 'block';
+    overwriteWarning.textContent =
+      `⚠ This will overwrite "${data.detected_dataset_id}" ` +
+      `(uploaded ${data.existing.uploaded_at.slice(0,10)}, ${data.existing.row_count.toLocaleString()} rows). Continue?`;
+  } else {
+    overwriteWarning.style.display = 'none';
+  }
+
+  uploadBtn.style.display = 'none';
+  demoBtn.style.display = 'none';
+  progressWrap.style.display = 'none';
+  confirmCard.style.display = 'block';
+}
+
+async function confirmUpload() {
+  if (!pendingBatchId) return;
+  const datasetId = datasetIdInput.value.trim();
+  if (!datasetId) {
+    showToast('Please enter a fiscal year label.', 'error');
+    return;
+  }
+
+  showLoading('Saving…');
+  confirmBtn.disabled = true;
+
+  try {
+    const res = await fetch('/upload/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch_id: pendingBatchId, dataset_id: datasetId }),
+    });
+    const data = await res.json();
+    hideLoading();
+
+    if (!res.ok) {
+      showToast('Error: ' + (data.error || 'Save failed'), 'error', 6000);
+      confirmBtn.disabled = false;
+      return;
+    }
+
+    showToast(`✅ Loaded ${data.rows_parsed} bookings – redirecting…`, 'success');
+    setTimeout(() => { window.location = data.redirect; }, 1000);
+  } catch (err) {
+    hideLoading();
+    showToast('Network error: ' + err.message, 'error');
+    confirmBtn.disabled = false;
+  }
+}
+
+function cancelUpload() {
+  pendingBatchId = null;
+  selectedFiles = [];
+  confirmCard.style.display = 'none';
+  uploadBtn.style.display = 'block';
+  demoBtn.style.display = 'block';
+  confirmBtn.disabled = false;
+  renderFileList();
 }
 
 async function loadDemo() {

@@ -15,7 +15,7 @@ except ImportError:
     _HAS_CORS = False
 
 
-def create_app(config_name=None):
+def create_app(config_name=None, database_path=None):
     app = Flask(
         __name__,
         template_folder="../templates",
@@ -46,12 +46,22 @@ def create_app(config_name=None):
     )
     app.config["ALLOWED_EXTENSIONS"] = {"xlsx", "xls", "csv"}
     app.config["DEBUG"] = debug
+    app.config["DATABASE_PATH"] = database_path or os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "instance", "datasets.db"
+    )
 
     if _HAS_CORS:
         CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(app.config["DATA_FOLDER"], exist_ok=True)
+    os.makedirs(os.path.dirname(app.config["DATABASE_PATH"]), exist_ok=True)
+
+    from app.models.db import init_db
+    from app.models import store
+
+    init_db(app.config["DATABASE_PATH"])
+    store.configure(app.config["DATABASE_PATH"])
 
     from app.routes.main import main_bp
     from app.routes.api import api_bp
