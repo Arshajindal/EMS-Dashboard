@@ -62,8 +62,9 @@ def save_dataset(
     reporting_period: str,
     validation,
     source_files: Optional[list] = None,
+    dataset_id: Optional[str] = None,
 ) -> str:
-    dataset_id = derive_dataset_id(reporting_period)
+    dataset_id = dataset_id or derive_dataset_id(reporting_period)
     validation_dict = validation.to_dict() if hasattr(validation, "to_dict") else validation
     now = datetime.now(timezone.utc).isoformat()
 

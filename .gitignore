@@ -8,9 +8,9 @@ venv/
 env/
 .venv/
 /uploads/
-data/*.xlsx
-data/*.xls
-data/*.csv
+data/**/*.xlsx
+data/**/*.xls
+data/**/*.csv
 *.log
 .DS_Store
 instance/

@@ -48,3 +48,34 @@ def real_fy26_dataset(fy26_file_paths):
     """
     net, gross, host = fy26_file_paths
     return parse_ems_files(net_path=net, gross_path=gross, host_path=host)
+
+
+@pytest.fixture(scope="session")
+def trimmed_fy26_file_paths(tmp_path_factory, fy26_file_paths):
+    """
+    A second, genuinely-different-but-still-valid real file set: the actual
+    Net/Gross workbooks with a trailing chunk of data rows deleted (headers
+    and merged-cell blocks untouched — deletion only touches rows well past
+    them). Used by upload-flow tests that need two uploads with provably
+    different totals without a second real fiscal year on disk. Row deletion
+    (not cell-value editing) keeps this safe: same schema, same reporting
+    period text, real reconciliation guard still exercised on real data —
+    just fewer bookings.
+    """
+    import openpyxl
+
+    net, gross, host = fy26_file_paths
+    out_dir = tmp_path_factory.mktemp("trimmed_fy26")
+    trim = 2000
+
+    trimmed = {}
+    for label, path in [("net", net), ("gross", gross)]:
+        wb = openpyxl.load_workbook(path)
+        ws = wb.active
+        start_row = ws.max_row - trim + 1
+        ws.delete_rows(start_row, trim)
+        out_path = out_dir / f"{label}_trimmed.xlsx"
+        wb.save(out_path)
+        trimmed[label] = out_path
+
+    return trimmed["net"], trimmed["gross"], host
