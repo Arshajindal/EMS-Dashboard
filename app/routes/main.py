@@ -41,4 +41,4 @@ def dashboard():
 
 @main_bp.route("/upload-page")
 def upload_page():
-    return render_template("upload.html")
+    return render_template("upload.html", has_datasets=bool(list_datasets()))

@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Upload Files{% endblock %}
 
-{% block nav_actions %}{% endblock %}
+{% block nav_actions %}
+{% if has_datasets %}
+<button class="btn-outline-sm" onclick="window.location='/dashboard'">← Back to Dashboard</button>
+{% endif %}
+{% endblock %}
 
 {% block head_extra %}
 <style>

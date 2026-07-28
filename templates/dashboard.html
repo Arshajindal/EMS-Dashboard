@@ -296,7 +296,11 @@ tr:hover td { background: var(--hover-bg); }
 .year-row.checked { border-color: var(--year-swatch, var(--gold)); }
 .year-row input[type="checkbox"] { cursor: pointer; }
 .year-row input[type="checkbox"]:disabled { cursor: not-allowed; }
-.year-row.disabled { opacity: .45; }
+/* Dim only when disabled AND unchecked (can't add more — at the 4-year
+   cap). A checked-but-disabled row (the sole remaining year, which must
+   stay selected) keeps full opacity — it reads as "locked in," not
+   "unavailable". */
+.year-row.disabled:not(.checked) { opacity: .45; }
 .year-swatch {
   width: 10px; height: 10px; border-radius: 50%;
   display: inline-block;
@@ -858,9 +862,13 @@ function renderYearCheckboxes(datasets) {
   const list = document.getElementById('yearRowList');
   const atCap = checkedYearIds.length >= MAX_YEARS;
 
+  const isLastChecked = checkedYearIds.length === 1;
+
   list.innerHTML = sortedDatasets.map(d => {
     const checked = checkedYearIds.includes(d.id);
-    const disabled = !checked && atCap;
+    // Disabled if adding it would exceed the cap, OR it's the sole checked
+    // year (at least one must always stay selected).
+    const disabled = (!checked && atCap) || (checked && isLastChecked);
     const color = checked ? assignYearColor(d.id) : '';
     return `
       <label class="year-row ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}" style="${color ? `--year-swatch:${color}` : ''}">
@@ -880,7 +888,7 @@ function renderYearCheckboxes(datasets) {
   const multiSelect = document.getElementById('yearMultiSelect');
   multiSelect.innerHTML = sortedDatasets.map(d => {
     const checked = checkedYearIds.includes(d.id);
-    const disabled = !checked && atCap;
+    const disabled = (!checked && atCap) || (checked && isLastChecked);
     return `<option value="${d.id}" ${checked ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${d.id} (${d.rows.toLocaleString()} rows, ${fmtDate(d.uploaded_at)})</option>`;
   }).join('');
 }
@@ -912,6 +920,16 @@ async function onYearToggle(id, checked) {
     checkedYearIds = checkedYearIds.filter(x => x !== id).concat(id);
     primaryYearId = id;
   } else {
+    // At least one fiscal year must always stay selected — no blank/empty
+    // dashboard state reachable via unchecking. The checkbox for the sole
+    // remaining checked year is also disabled (see renderYearCheckboxes)
+    // so this normally can't even be attempted; this is the defensive
+    // backstop for that invariant.
+    if (checkedYearIds.length <= 1) {
+      showToast('At least one fiscal year must stay selected.', 'error');
+      renderYearCheckboxes(allDatasets); // revert any stray visual state (e.g. multi-select)
+      return;
+    }
     checkedYearIds = checkedYearIds.filter(x => x !== id);
     dataByYear.delete(id);
     if (primaryYearId === id) {
