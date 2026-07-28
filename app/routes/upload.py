@@ -252,26 +252,44 @@ def clear_data():
     return jsonify({"status": "cleared", "dataset_id": dataset_id})
 
 
+def _find_demo_triplet(base_dir: Path):
+    """
+    Locates a complete Net/Gross/Host file triplet, all three from the SAME
+    directory — never mixes files from different fiscal-year subfolders,
+    which would silently merge unrelated years and either fail the
+    reconciliation guard or (worse) pass it on coincidentally-aligned data.
+    Checks base_dir itself first (flat /data layout), then its immediate
+    subdirectories in reverse alphabetical order — so with FY24/FY25/FY26
+    subfolders present, the most recent (FY26) wins.
+    """
+    candidates = [base_dir] + sorted(
+        (p for p in base_dir.iterdir() if p.is_dir()), reverse=True
+    )
+    for d in candidates:
+        net   = list(d.glob("*Net*Sales*Booking*.xlsx")) + list(d.glob("*net*.xlsx"))
+        gross = list(d.glob("*Gross*Sales*Booking*.xlsx")) + list(d.glob("*gross*booking*.xlsx"))
+        host  = list(d.glob("*Host*.xlsx")) + list(d.glob("*host*.xlsx"))
+        if net and gross and host:
+            return net[0], gross[0], host[0]
+    return None
+
+
 @upload_bp.route("/demo", methods=["POST"])
 def load_demo():
     """Load the pre-shipped EMS files that ship with the app."""
     data_dir = Path(current_app.config["DATA_FOLDER"])
+    triplet = _find_demo_triplet(data_dir)
 
-    net_candidates   = list(data_dir.glob("*Net*Sales*Booking*.xlsx")) + \
-                       list(data_dir.glob("*net*.xlsx"))
-    gross_candidates = list(data_dir.glob("*Gross*Sales*Booking*.xlsx")) + \
-                       list(data_dir.glob("*gross*booking*.xlsx"))
-    host_candidates  = list(data_dir.glob("*Host*.xlsx")) + \
-                       list(data_dir.glob("*host*.xlsx"))
-
-    if not (net_candidates and gross_candidates and host_candidates):
+    if triplet is None:
         return jsonify({"error": "Demo files not found in /data folder."}), 404
+
+    net_path, gross_path, host_path = triplet
 
     try:
         dataset = parse_ems_files(
-            net_path=net_candidates[0],
-            gross_path=gross_candidates[0],
-            host_path=host_candidates[0],
+            net_path=net_path,
+            gross_path=gross_path,
+            host_path=host_path,
         )
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
