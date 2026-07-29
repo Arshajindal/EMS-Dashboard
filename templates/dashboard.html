@@ -293,7 +293,17 @@ tr:hover td { background: var(--hover-bg); }
   cursor: pointer;
   transition: border-color .15s;
 }
-.year-row.checked { border-color: var(--year-swatch, var(--gold)); }
+/* Checked rows fill with the year's assigned color instead of a small dot —
+   easier to tell years apart at a glance. Text color switches to whichever
+   of black/white contrasts better with that background (see
+   contrastTextColor()), since the fixed palette spans both light (gold)
+   and dark (maroon) colors. */
+.year-row.checked {
+  background: var(--year-swatch, var(--gold));
+  border-color: var(--year-swatch, var(--gold));
+  color: var(--year-text, var(--text));
+}
+.year-row.checked .year-row-meta { color: var(--year-text, var(--text-muted)); opacity: .85; }
 .year-row input[type="checkbox"] { cursor: pointer; }
 .year-row input[type="checkbox"]:disabled { cursor: not-allowed; }
 /* Dim only when disabled AND unchecked (can't add more — at the 4-year
@@ -403,6 +413,27 @@ tr:hover td { background: var(--hover-bg); }
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: .5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+.file-drawer-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: .8rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+.file-drawer-remove-btn:hover {
+  color: #e74c3c;
+  background: rgba(231,76,60,.15);
 }
 .file-drawer-row {
   padding: .35rem 1rem;
@@ -696,6 +727,19 @@ const MAX_YEARS = 4;
 const FISCAL_MONTHS = ['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'];
 const FISCAL_QUARTERS = ['FQ1','FQ2','FQ3','FQ4'];
 
+// Picks black or white text for a given hex background using a simplified
+// relative-luminance heuristic, so each year's solid-color row in Compare
+// Fiscal Years stays readable regardless of how bright/dark its assigned
+// palette color is (e.g. gold needs dark text, maroon needs light text).
+function contrastTextColor(hex) {
+  const c = hex.replace('#', '');
+  const r = parseInt(c.substr(0, 2), 16) / 255;
+  const g = parseInt(c.substr(2, 2), 16) / 255;
+  const b = parseInt(c.substr(4, 2), 16) / 255;
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 0.6 ? '#1a1a1a' : '#ffffff';
+}
+
 function assignYearColor(id) {
   if (yearColors[id] && !Object.entries(yearColors).some(([k, v]) => k !== id && v === yearColors[id] && checkedYearIds.includes(k))) {
     return yearColors[id];
@@ -870,11 +914,11 @@ function renderYearCheckboxes(datasets) {
     // year (at least one must always stay selected).
     const disabled = (!checked && atCap) || (checked && isLastChecked);
     const color = checked ? assignYearColor(d.id) : '';
+    const rowStyle = color ? `--year-swatch:${color};--year-text:${contrastTextColor(color)}` : '';
     return `
-      <label class="year-row ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}" style="${color ? `--year-swatch:${color}` : ''}">
+      <label class="year-row ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}" style="${rowStyle}">
         <input type="checkbox" data-id="${d.id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}
                onchange="onYearToggle('${d.id}', this.checked)"/>
-        <span class="year-swatch"></span>
         <span>${d.id}</span>
         <span class="year-row-meta">${d.rows.toLocaleString()} rows · ${fmtDate(d.uploaded_at)}</span>
       </label>
@@ -1080,9 +1124,8 @@ function switchTab(name) {
 // File drawer — compact, view-only upload-history panel. Lists every
 // dataset ever uploaded (not just the ones currently checked in Compare
 // Fiscal Years), reusing allDatasets so no extra fetch is needed. Shown in
-// upload-recency order (most recent first, same as the raw /api/datasets
-// response) — a history log, deliberately not re-sorted chronologically by
-// year the way the Compare Fiscal Years card is.
+// chronological (increasing year) order via the same compareYearIds()
+// comparator the Compare Fiscal Years card uses, not upload-recency order.
 // ─────────────────────────────────────────────────────────────────────────────
 function renderFileDrawer() {
   const panel = document.getElementById('fileDrawerPanel');
@@ -1090,11 +1133,70 @@ function renderFileDrawer() {
     panel.innerHTML = '<div class="file-drawer-header">Upload History</div><div class="file-drawer-empty">No uploads yet.</div>';
     return;
   }
-  const groups = allDatasets.map(d => {
+  const sortedDatasets = [...allDatasets].sort((a, b) => compareYearIds(a.id, b.id));
+  const groups = sortedDatasets.map(d => {
     const files = (d.source_files || []).map(name => `<div class="file-drawer-row">${name}</div>`).join('');
-    return `<div class="file-drawer-group-label">${d.id}</div>${files}`;
+    return `
+      <div class="file-drawer-group-label">
+        <span>${d.id}</span>
+        <button type="button" class="file-drawer-remove-btn" title="Remove ${d.id}" onclick="removeDataset('${d.id}')">✕ Remove</button>
+      </div>
+      ${files}`;
   }).join('');
   panel.innerHTML = `<div class="file-drawer-header">Upload History</div>${groups}`;
+}
+
+// Permanently deletes one uploaded fiscal year (POST /upload/clear) and
+// reconciles all client-side state that referenced it: allDatasets,
+// checkedYearIds, dataByYear, and the URL. If the removed year was the sole
+// checked one, falls back to the most-recently-uploaded remaining dataset
+// (same default initDashboard() uses on first load). If it was the last
+// dataset left entirely, there's nothing left to show on this page, so this
+// sends the user to upload instead of rendering a never-built empty state.
+async function removeDataset(id) {
+  if (!confirm(`Remove ${id}? This permanently deletes its uploaded data — you'll need to re-upload the source files to get it back.`)) {
+    return;
+  }
+
+  showLoading('Removing ' + id + '…');
+  try {
+    const res = await fetch('/upload/clear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'dataset_id=' + encodeURIComponent(id),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to remove dataset');
+
+    allDatasets = allDatasets.filter(d => d.id !== id);
+    checkedYearIds = checkedYearIds.filter(x => x !== id);
+    dataByYear.delete(id);
+
+    if (!allDatasets.length) {
+      window.location = '/upload-page';
+      return;
+    }
+
+    if (!checkedYearIds.length) {
+      checkedYearIds = [allDatasets[0].id];
+    }
+    if (primaryYearId === id) {
+      primaryYearId = checkedYearIds[checkedYearIds.length - 1];
+    }
+
+    writeYearsToUrl(checkedYearIds);
+    renderYearCheckboxes(allDatasets);
+    renderFileDrawer();
+    reconcileTabYears();
+
+    await fetchYears(checkedYearIds);
+    hideLoading();
+    renderAll(dataByYear, yearColors);
+    showToast(`${id} removed.`, 'success');
+  } catch (e) {
+    hideLoading();
+    showToast('Error: ' + e.message, 'error');
+  }
 }
 
 function toggleFileDrawer(forceClose) {
