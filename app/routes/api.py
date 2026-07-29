@@ -132,6 +132,7 @@ def api_datasets():
             "reporting_period": d["reporting_period"],
             "rows": d["row_count"],
             "uploaded_at": d["updated_at"],
+            "source_files": d["source_files"],
         }
         for d in list_datasets()
     ]

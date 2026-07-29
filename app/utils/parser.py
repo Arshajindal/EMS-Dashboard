@@ -874,3 +874,162 @@ def parse_single_file(
         "rows": len(df),
         "validation": report.to_dict(),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-year batch grouping
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Replaces filename-based role/count assumptions with content-based
+# detection over an arbitrary number of files spanning an arbitrary number
+# of fiscal years. A single-year, 3-file upload is not a special case here —
+# it's just what this produces when only one reporting period is present.
+
+@dataclass
+class FileProbe:
+    role: str    # "net" | "gross" | "host" | "unknown"
+    period: str  # raw _extract_reporting_period() result
+
+
+def probe_file(path: Union[str, Path]) -> FileProbe:
+    """
+    Cheaply inspects a single EMS export's header block to determine its
+    role and reporting period, without doing the full row-by-row parse
+    (_build_field_map only scans the header rows) — used to group a batch
+    of uploaded files before committing to a full parse of any of them.
+
+    Booking schema is checked first: a real Host summary file structurally
+    cannot satisfy BOOKING_REQUIRED_FIELDS (it has no per-booking start/end/
+    res_id columns — it's a grouped summary, not a row-per-booking report),
+    whereas a Gross booking file WOULD superficially satisfy
+    HOST_REQUIRED_FIELDS on its own (it also has a "Host" column and a
+    "Gross Sales"-aliased column), so checking host-schema first would
+    misclassify it. Only falls back to the host-schema check once the
+    booking-schema check has failed.
+
+    Never raises — an unreadable/corrupt file becomes role="unknown" so one
+    bad file in a batch can't block grouping the rest.
+    """
+    try:
+        raw = pd.read_excel(path, sheet_name=0, header=None)
+    except Exception:
+        return FileProbe(role="unknown", period="Unknown")
+
+    period = _extract_reporting_period(raw)
+
+    booking_map = _build_field_map(raw, BOOKING_FIELD_ALIASES)
+    if all(f in booking_map for f in BOOKING_REQUIRED_FIELDS):
+        has_net = "net_sales" in booking_map
+        has_gross = "gross_sales" in booking_map
+        if has_net:
+            # Same tie-break _parse_booking_sheet() uses when both sales
+            # columns are present, so probing and the eventual real parse
+            # never disagree about a file's role.
+            return FileProbe(role="net", period=period)
+        if has_gross:
+            return FileProbe(role="gross", period=period)
+        return FileProbe(role="unknown", period=period)
+
+    host_map = _build_field_map(raw, HOST_FIELD_ALIASES)
+    if all(f in host_map for f in HOST_REQUIRED_FIELDS):
+        return FileProbe(role="host", period=period)
+
+    return FileProbe(role="unknown", period=period)
+
+
+def _normalize_period_key(period: str) -> str:
+    """
+    EMS's Host summary report consistently appends " (Booking Dates)" to its
+    reporting-period text (verified against every real /data fixture — FY24,
+    FY25, FY26 host files all have it; their sibling Net/Gross files never
+    do), which would otherwise split one real year's files into two groups.
+    Strips any trailing parenthetical annotation, not just that one exact
+    string, before trim/case-fold — a structural EMS formatting quirk, not
+    an arbitrary special case for this one phrase.
+    """
+    stripped = re.sub(r"\s*\([^)]*\)\s*$", "", period).strip()
+    return stripped.casefold()
+
+
+@dataclass
+class FileGroup:
+    period: str
+    status: str  # "valid" | "incomplete" | "ambiguous"
+    net_path: Optional[Path] = None
+    gross_path: Optional[Path] = None
+    host_path: Optional[Path] = None
+    missing_roles: list = field(default_factory=list)
+    collision_roles: list = field(default_factory=list)
+    unrecognized_files: list = field(default_factory=list)
+    role_counts: dict = field(default_factory=dict)  # {"net": 1, "gross": 2, "host": 1} — always populated
+
+
+def group_files_by_period(paths: list[Union[str, Path]]) -> dict[str, FileGroup]:
+    """
+    Probes every file once and groups them by normalized reporting period,
+    then classifies each group independently — one group's status never
+    affects another's.
+
+    Classification order (ambiguity checked before completeness — a role
+    can't be confirmed "missing" if an unrecognized file in the group might
+    have been it):
+      1. ambiguous  — a role has 2+ files, or any file's role is unknown.
+         Same "do not guess" precedent as parse_ems_files()'s existing
+         same-column hard error (§5.5), just applied pre-parse.
+      2. incomplete — no ambiguity, but at least one role has zero files.
+      3. valid      — exactly one file per role; ready for parse_ems_files().
+
+    Returns {normalized_period: FileGroup}, keyed by the trimmed/case-folded
+    period so trivial formatting differences across sibling files for the
+    same year don't split it into two groups. Each FileGroup.period keeps
+    the first raw (non-normalized) period string seen for that key, so the
+    user-facing label stays exactly as EMS wrote it.
+    """
+    paths = [Path(p) for p in paths]
+    by_role: dict[str, dict[str, list[Path]]] = {}
+    display_period: dict[str, str] = {}
+
+    for path in paths:
+        probe = probe_file(path)
+        key = _normalize_period_key(probe.period)
+        if key not in by_role:
+            by_role[key] = {"net": [], "gross": [], "host": [], "unknown": []}
+            display_period[key] = probe.period
+        by_role[key][probe.role].append(path)
+
+    groups: dict[str, FileGroup] = {}
+    for key, roles in by_role.items():
+        role_counts = {r: len(roles[r]) for r in ("net", "gross", "host")}
+        collision_roles = [r for r in ("net", "gross", "host") if len(roles[r]) >= 2]
+        unrecognized = roles["unknown"]
+
+        if collision_roles or unrecognized:
+            groups[key] = FileGroup(
+                period=display_period[key],
+                status="ambiguous",
+                collision_roles=collision_roles,
+                unrecognized_files=unrecognized,
+                role_counts=role_counts,
+            )
+            continue
+
+        missing_roles = [r for r in ("net", "gross", "host") if len(roles[r]) == 0]
+        if missing_roles:
+            groups[key] = FileGroup(
+                period=display_period[key],
+                status="incomplete",
+                missing_roles=missing_roles,
+                role_counts=role_counts,
+            )
+            continue
+
+        groups[key] = FileGroup(
+            period=display_period[key],
+            status="valid",
+            net_path=roles["net"][0],
+            gross_path=roles["gross"][0],
+            host_path=roles["host"][0],
+            role_counts=role_counts,
+        )
+
+    return groups

@@ -26,15 +26,22 @@ def client(app):
 
 @pytest.fixture(scope="session")
 def fy26_file_paths():
-    """Locates the real /data FY26 export files (same globs upload.py's load_demo() uses)."""
+    """
+    Locates the real /data FY26 export files. /data/FY26/ is checked first
+    (current layout — the repo now keeps each fiscal year's real exports in
+    its own subfolder); falls back to flat /data/ so this still works if
+    that layout is ever reverted. Same globs upload.py's
+    _find_demo_triplet() uses.
+    """
+    base = DATA_DIR / "FY26" if (DATA_DIR / "FY26").is_dir() else DATA_DIR
     net = next(iter(
-        list(DATA_DIR.glob("*Net*Sales*Booking*.xlsx")) + list(DATA_DIR.glob("*net*.xlsx"))
+        list(base.glob("*Net*Sales*Booking*.xlsx")) + list(base.glob("*net*.xlsx"))
     ))
     gross = next(iter(
-        list(DATA_DIR.glob("*Gross*Sales*Booking*.xlsx")) + list(DATA_DIR.glob("*gross*booking*.xlsx"))
+        list(base.glob("*Gross*Sales*Booking*.xlsx")) + list(base.glob("*gross*booking*.xlsx"))
     ))
     host = next(iter(
-        list(DATA_DIR.glob("*Host*.xlsx")) + list(DATA_DIR.glob("*host*.xlsx"))
+        list(base.glob("*Host*.xlsx")) + list(base.glob("*host*.xlsx"))
     ))
     return net, gross, host
 

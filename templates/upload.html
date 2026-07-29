@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Upload Files{% endblock %}
 
-{% block nav_actions %}{% endblock %}
+{% block nav_actions %}
+{% if has_datasets %}
+<button class="btn-outline-sm" id="navBackToDashboard" onclick="window.location='/dashboard'">← Back to Dashboard</button>
+{% endif %}
+{% endblock %}
 
 {% block head_extra %}
 <style>
@@ -55,14 +59,6 @@
 .drop-zone input[type="file"] {
   position: absolute; inset: 0; opacity: 0; cursor: pointer;
 }
-.drop-zone.disabled {
-  opacity: .5;
-  cursor: not-allowed;
-}
-.drop-zone.disabled input[type="file"] {
-  cursor: not-allowed;
-  pointer-events: none;
-}
 .drop-icon { font-size: 2.5rem; margin-bottom: .75rem; }
 .drop-zone h3 { font-size: 1rem; margin-bottom: .4rem; }
 .drop-zone p  { color: var(--text-muted); font-size: .82rem; }
@@ -75,14 +71,8 @@
   border-radius: 8px; padding: .65rem 1rem;
   margin-bottom: .5rem; font-size: .85rem;
 }
-.file-list li .file-role {
-  margin-left: auto;
-  font-size: .75rem;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: 600;
-}
 .file-list li .remove-btn {
+  margin-left: auto;
   background: transparent;
   border: none;
   color: var(--text-muted);
@@ -96,10 +86,6 @@
   color: #e74c3c;
   background: rgba(231,76,60,.15);
 }
-.role-net          { background: rgba(46,204,113,.2); color: #2ecc71; }
-.role-gross        { background: rgba(52,152,219,.2); color: #3498db; }
-.role-host         { background: rgba(155,89,182,.2); color: #9b59b6; }
-.role-unknown      { background: rgba(231,76,60,.2);  color: #e74c3c; }
 
 /* Buttons */
 .btn-primary {
@@ -161,49 +147,72 @@
   transition: width .3s;
 }
 
-/* Confirm card (shown after preview, before persisting) */
-.confirm-card {
-  display: none;
+/* ── Per-group cards (one per detected fiscal year in the batch) ──────── */
+#groupCardsWrap { display: none; margin: 1rem 0; }
+.group-card {
   background: var(--gray-700);
   border-radius: 8px;
-  padding: 1.25rem;
-  margin: 1rem 0;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: .85rem;
 }
-.confirm-card label {
-  display: block;
-  font-size: .78rem;
-  color: var(--text-muted);
-  margin-bottom: .4rem;
+.group-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .5rem; margin-bottom: .55rem;
 }
-.confirm-card input[type="text"] {
+.group-card-header strong { font-size: .92rem; }
+.group-status-badge {
+  font-size: .66rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .5px; padding: 3px 8px; border-radius: 4px;
+  white-space: nowrap;
+}
+.group-status-ready      { background: rgba(46,204,113,.2); color: var(--success); }
+.group-status-saved      { background: rgba(52,152,219,.2); color: var(--info); }
+.group-status-incomplete { background: rgba(243,156,18,.2); color: var(--warning); }
+.group-status-ambiguous,
+.group-status-error      { background: rgba(231,76,60,.2);  color: var(--danger); }
+
+.group-card input[type="text"] {
   width: 100%;
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   color: var(--text);
   border-radius: 8px;
-  padding: .6rem .85rem;
-  font-size: .9rem;
+  padding: .55rem .8rem;
+  font-size: .88rem;
   font-weight: 600;
   margin-bottom: .5rem;
 }
-.confirm-card input[type="text"]:focus { outline: none; border-color: var(--gold); }
-.confirm-card .confirm-meta {
-  font-size: .78rem;
-  color: var(--text-muted);
-  margin-bottom: .75rem;
-}
-.overwrite-warning {
+.group-card input[type="text"]:focus { outline: none; border-color: var(--gold); }
+.group-card .group-meta { font-size: .76rem; color: var(--text-muted); }
+.group-card .overwrite-warning {
   background: rgba(243,156,18,.12);
   border: 1px solid rgba(243,156,18,.35);
   border-radius: 8px;
-  padding: .75rem 1rem;
-  font-size: .82rem;
+  padding: .6rem .85rem;
+  font-size: .78rem;
   color: var(--warning);
-  margin-bottom: .75rem;
+  margin: .6rem 0;
 }
-.confirm-actions { display: flex; gap: .75rem; }
-.confirm-actions .btn-primary,
-.confirm-actions .btn-secondary { margin-top: 0; }
+.group-card-actions { margin-top: .65rem; }
+.group-card-actions .btn-primary {
+  width: auto;
+  padding: .5rem 1.2rem;
+  font-size: .82rem;
+}
+
+.bulk-confirm-btn { display: none; margin-bottom: 1rem; }
+
+.go-to-dashboard-cta {
+  display: none;
+  background: rgba(46,204,113,.1);
+  border: 1px solid rgba(46,204,113,.3);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  text-align: center;
+  font-size: .85rem;
+}
+.go-to-dashboard-cta .btn-primary { margin-top: .6rem; }
 </style>
 {% endblock %}
 
@@ -217,11 +226,9 @@
     </div>
 
     <div class="req-box">
-      <strong>📂 Required Files (add one at a time or all at once — max 3)</strong>
+      <strong>📂 Required Files</strong>
       <ul>
-        <li><strong>Net Sales by Booking</strong> – filename must contain "Net"</li>
-        <li><strong>Gross Sales by Booking</strong> – filename must contain "Gross"</li>
-        <li><strong>Gross Sales by Host</strong> – filename must contain "Host"</li>
+        <li>Each fiscal year needs 3 files: <strong>Net Sales by Booking,</strong> <strong>Gross Sales by Booking, </strong> <strong>Gross Sales by Host</strong></li>
       </ul>
     </div>
 
@@ -241,17 +248,15 @@
       <div class="progress-bar-fill" id="progressBar"></div>
     </div>
 
-    <!-- Confirm card (shown after a successful preview) -->
-    <div class="confirm-card" id="confirmCard">
-      <div id="overwriteWarning" class="overwrite-warning" style="display:none;"></div>
-      <label for="datasetIdInput">Detected fiscal year — edit if needed before saving</label>
-      <input type="text" id="datasetIdInput"/>
-      <div class="confirm-meta" id="confirmMeta"></div>
-      <div class="confirm-actions">
-        <button class="btn-primary" id="confirmBtn" onclick="confirmUpload()">Confirm &amp; Save</button>
-        <button class="btn-secondary" onclick="cancelUpload()">Cancel</button>
-      </div>
+    <!-- Go-to-dashboard call to action, shown once at least one group is saved -->
+    <div class="go-to-dashboard-cta" id="goToDashboardCta">
+      <div id="goToDashboardMsg"></div>
+      <button class="btn-primary" id="goToDashboardBtn" onclick="goToDashboard()">Go to Dashboard →</button>
     </div>
+
+    <!-- One card per detected fiscal-year group -->
+    <button class="btn-primary bulk-confirm-btn" id="bulkConfirmBtn" onclick="confirmAllReady()"></button>
+    <div id="groupCardsWrap"></div>
 
     <!-- Upload button -->
     <button class="btn-primary" id="uploadBtn" disabled onclick="uploadFiles()">
@@ -276,39 +281,26 @@ const progressWrap = document.getElementById('progressWrap');
 const progressBar  = document.getElementById('progressBar');
 const dropZoneTitle = document.getElementById('dropZoneTitle');
 const dropZoneHint  = document.getElementById('dropZoneHint');
-const confirmCard   = document.getElementById('confirmCard');
-const datasetIdInput = document.getElementById('datasetIdInput');
-const confirmMeta    = document.getElementById('confirmMeta');
-const overwriteWarning = document.getElementById('overwriteWarning');
-const confirmBtn     = document.getElementById('confirmBtn');
+const groupCardsWrap = document.getElementById('groupCardsWrap');
+const bulkConfirmBtn = document.getElementById('bulkConfirmBtn');
+const goToDashboardCta = document.getElementById('goToDashboardCta');
 
-const MAX_FILES = 3;
 let selectedFiles = [];
 let pendingBatchId = null;
-
-function detectRole(name) {
-  const n = name.toLowerCase();
-  if (n.includes('net'))   return { label: 'Net Sales',   cls: 'role-net'   };
-  if (n.includes('host'))  return { label: 'Host Report', cls: 'role-host'  };
-  if (n.includes('gross')) return { label: 'Gross Sales', cls: 'role-gross' };
-  return { label: 'Unknown', cls: 'role-unknown' };
-}
+let groups = [];                // raw group objects from the /upload/files response
+let confirmedThisSession = [];  // dataset_ids successfully confirmed, this page load
 
 function addFiles(files) {
   const incoming = Array.from(files);
   let skippedDuplicate = false;
-  let skippedLimit = false;
 
   for (const f of incoming) {
-    if (selectedFiles.length >= MAX_FILES) { skippedLimit = true; break; }
     const isDuplicate = selectedFiles.some(sf => sf.name === f.name && sf.size === f.size);
     if (isDuplicate) { skippedDuplicate = true; continue; }
     selectedFiles.push(f);
   }
 
-  if (skippedLimit) {
-    showToast(`Maximum of ${MAX_FILES} files allowed. Remove a file to add another.`, 'error');
-  } else if (skippedDuplicate) {
+  if (skippedDuplicate) {
     showToast('One or more files were already added.', 'error');
   }
 
@@ -323,13 +315,11 @@ function removeFile(index) {
 function renderFileList() {
   fileList.innerHTML = '';
   selectedFiles.forEach((f, i) => {
-    const role = detectRole(f.name);
     const li = document.createElement('li');
     li.innerHTML = `
       <span>📄</span>
       <span>${f.name}</span>
       <span style="color:var(--text-muted);font-size:.78rem">${(f.size/1024).toFixed(0)} KB</span>
-      <span class="file-role ${role.cls}">${role.label}</span>
       <button type="button" class="remove-btn" title="Remove file" data-index="${i}">✕</button>
     `;
     li.querySelector('.remove-btn').addEventListener('click', () => removeFile(i));
@@ -337,13 +327,6 @@ function renderFileList() {
   });
 
   uploadBtn.disabled = selectedFiles.length === 0;
-
-  const atLimit = selectedFiles.length >= MAX_FILES;
-  fileInput.disabled = atLimit;
-  dropZone.classList.toggle('disabled', atLimit);
-  dropZoneTitle.textContent = atLimit ? 'Maximum of 3 files added' : 'Drop your Excel files here';
-  dropZoneHint.textContent  = atLimit ? 'Remove a file below to add a different one' : 'or click to browse — accepts .xlsx / .xls';
-
   // Reset the input's value so selecting the same file again after removal re-fires 'change'.
   fileInput.value = '';
 }
@@ -352,16 +335,12 @@ fileInput.addEventListener('change', e => addFiles(e.target.files));
 
 dropZone.addEventListener('dragover', e => {
   e.preventDefault();
-  if (selectedFiles.length < MAX_FILES) dropZone.classList.add('drag-over');
+  dropZone.classList.add('drag-over');
 });
-dropZone.addEventListener('dragleave',  () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('drag-over');
-  if (selectedFiles.length >= MAX_FILES) {
-    showToast(`Maximum of ${MAX_FILES} files allowed. Remove a file to add another.`, 'error');
-    return;
-  }
   addFiles(e.dataTransfer.files);
 });
 
@@ -395,11 +374,7 @@ async function uploadFiles() {
       return;
     }
 
-    if (data.warnings && data.warnings.length) {
-      console.warn('Validation warnings:', data.warnings);
-    }
-
-    showPreview(data);
+    showGroups(data);
   } catch (err) {
     clearInterval(timer);
     hideLoading();
@@ -409,69 +384,206 @@ async function uploadFiles() {
   }
 }
 
-function showPreview(data) {
+function showGroups(data) {
   pendingBatchId = data.batch_id;
-  datasetIdInput.value = data.detected_dataset_id;
-  confirmMeta.textContent = `Detected reporting period: ${data.reporting_period} — ${data.row_count.toLocaleString()} bookings parsed.`;
+  groups = data.groups;
 
-  if (data.key_exists) {
-    overwriteWarning.style.display = 'block';
-    overwriteWarning.textContent =
-      `⚠ This will overwrite "${data.detected_dataset_id}" ` +
-      `(uploaded ${data.existing.uploaded_at.slice(0,10)}, ${data.existing.row_count.toLocaleString()} rows). Continue?`;
-  } else {
-    overwriteWarning.style.display = 'none';
-  }
-
-  uploadBtn.style.display = 'none';
+  // Stays visible and re-enabled (not hidden) so a fixed/added file for an
+  // "incomplete" or "ambiguous" group can be re-submitted as a fresh
+  // preview -- each /upload/files call is an independent batch, so "add
+  // the missing file and re-upload" (see renderGroupCard) requires the
+  // button to still be there afterward.
+  uploadBtn.textContent = 'Re-check Files';
+  uploadBtn.disabled = selectedFiles.length === 0;
   demoBtn.style.display = 'none';
   progressWrap.style.display = 'none';
-  confirmCard.style.display = 'block';
+  groupCardsWrap.style.display = 'block';
+
+  renderGroupCards();
 }
 
-async function confirmUpload() {
-  if (!pendingBatchId) return;
-  const datasetId = datasetIdInput.value.trim();
+function renderGroupCards() {
+  groupCardsWrap.innerHTML = groups.map((g, i) => renderGroupCard(g, i)).join('');
+
+  const bulkEligible = groups.filter(g => g.status === 'ready' && !g.key_exists && !g._saved);
+  if (bulkEligible.length > 1) {
+    bulkConfirmBtn.style.display = 'block';
+    bulkConfirmBtn.textContent = `Confirm all ready (${bulkEligible.length})`;
+  } else {
+    bulkConfirmBtn.style.display = 'none';
+  }
+
+  updateGoToDashboardCta();
+}
+
+function renderGroupCard(g, index) {
+  if (g.status === 'incomplete') {
+    return `
+      <div class="group-card">
+        <div class="group-card-header">
+          <strong>${g.reporting_period}</strong>
+          <span class="group-status-badge group-status-incomplete">Incomplete</span>
+        </div>
+        <div class="group-meta">Missing file role(s): ${g.missing_roles.join(', ')}. Add the missing file(s) and re-upload to complete this year.</div>
+      </div>
+    `;
+  }
+
+  if (g.status === 'ambiguous' || g.status === 'error') {
+    const label = g.status === 'error' ? 'Parse Error' : 'Ambiguous';
+    return `
+      <div class="group-card">
+        <div class="group-card-header">
+          <strong>${g.reporting_period}</strong>
+          <span class="group-status-badge group-status-${g.status}">${label}</span>
+        </div>
+        <div class="group-meta">${g.detail}</div>
+      </div>
+    `;
+  }
+
+  // status === "ready"
+  if (g._saved) {
+    return `
+      <div class="group-card">
+        <div class="group-card-header">
+          <strong>${g._savedId}</strong>
+          <span class="group-status-badge group-status-saved">Saved</span>
+        </div>
+        <div class="group-meta">${g.row_count.toLocaleString()} bookings saved.</div>
+      </div>
+    `;
+  }
+
+  const warning = g.key_exists ? `
+    <div class="overwrite-warning">
+      ⚠ This will overwrite "${g.detected_dataset_id}"
+      (uploaded ${g.existing.uploaded_at.slice(0,10)}, ${g.existing.row_count.toLocaleString()} rows). Continue?
+    </div>
+  ` : '';
+
+  return `
+    <div class="group-card">
+      <div class="group-card-header">
+        <strong>Detected: ${g.detected_dataset_id}</strong>
+        <span class="group-status-badge group-status-ready">Ready</span>
+      </div>
+      <input type="text" id="groupLabel-${index}" value="${g.detected_dataset_id}"/>
+      <div class="group-meta">${g.reporting_period} — ${g.row_count.toLocaleString()} bookings parsed.</div>
+      ${warning}
+      <div class="group-card-actions">
+        <button class="btn-primary" onclick="confirmGroup(${index})">
+          ${g.key_exists ? 'Confirm Overwrite' : 'Confirm & Save'}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+async function _doConfirm(groupId, datasetId) {
+  try {
+    const res = await fetch('/upload/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch_id: pendingBatchId, group_id: groupId, dataset_id: datasetId }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || 'Save failed' };
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: 'Network error: ' + err.message };
+  }
+}
+
+async function confirmGroup(index) {
+  const g = groups[index];
+  const input = document.getElementById(`groupLabel-${index}`);
+  const datasetId = input.value.trim();
   if (!datasetId) {
     showToast('Please enter a fiscal year label.', 'error');
     return;
   }
 
   showLoading('Saving…');
-  confirmBtn.disabled = true;
+  const result = await _doConfirm(g.group_id, datasetId);
+  hideLoading();
 
-  try {
-    const res = await fetch('/upload/confirm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batch_id: pendingBatchId, dataset_id: datasetId }),
-    });
-    const data = await res.json();
-    hideLoading();
+  if (!result.ok) {
+    showToast('Error: ' + result.error, 'error', 6000);
+    return;
+  }
 
-    if (!res.ok) {
-      showToast('Error: ' + (data.error || 'Save failed'), 'error', 6000);
-      confirmBtn.disabled = false;
-      return;
-    }
+  g._saved = true;
+  g._savedId = datasetId;
+  confirmedThisSession.push(datasetId);
+  renderGroupCards();
+  showToast(`✅ ${datasetId} saved (${result.data.rows_parsed.toLocaleString()} bookings).`, 'success');
+}
 
-    showToast(`✅ Loaded ${data.rows_parsed} bookings – redirecting…`, 'success');
-    setTimeout(() => { window.location = data.redirect; }, 1000);
-  } catch (err) {
-    hideLoading();
-    showToast('Network error: ' + err.message, 'error');
-    confirmBtn.disabled = false;
+// Loops confirm over every "ready" group whose key doesn't already exist.
+// Groups with key_exists=true are deliberately excluded — bulk confirm
+// must never silently overwrite an existing year; those still require the
+// individual card's own explicit "Confirm Overwrite" click. Each group is
+// confirmed independently (Promise.allSettled) so one failure can't block
+// the others from saving.
+async function confirmAllReady() {
+  const eligible = groups
+    .map((g, i) => ({ g, i }))
+    .filter(({ g }) => g.status === 'ready' && !g.key_exists && !g._saved);
+
+  if (!eligible.length) return;
+
+  bulkConfirmBtn.disabled = true;
+  showLoading(`Saving ${eligible.length} fiscal year${eligible.length !== 1 ? 's' : ''}…`);
+
+  const settled = await Promise.allSettled(eligible.map(async ({ g, i }) => {
+    const input = document.getElementById(`groupLabel-${i}`);
+    const datasetId = (input ? input.value.trim() : '') || g.detected_dataset_id;
+    const result = await _doConfirm(g.group_id, datasetId);
+    return { i, datasetId, result };
+  }));
+
+  hideLoading();
+  bulkConfirmBtn.disabled = false;
+
+  let successCount = 0, failCount = 0;
+  settled.forEach(outcome => {
+    if (outcome.status !== 'fulfilled' || !outcome.value.result.ok) { failCount++; return; }
+    const { i, datasetId } = outcome.value;
+    groups[i]._saved = true;
+    groups[i]._savedId = datasetId;
+    confirmedThisSession.push(datasetId);
+    successCount++;
+  });
+
+  renderGroupCards();
+  if (successCount) showToast(`✅ Saved ${successCount} fiscal year${successCount !== 1 ? 's' : ''}.`, 'success');
+  if (failCount) showToast(`${failCount} group(s) failed to save — check them individually.`, 'error', 6000);
+}
+
+// The Compare Fiscal Years checklist lives on dashboard.html, a separate
+// page load — there's no live state to push into. Reusing its existing
+// ?years= restore mechanism (built in Phase 2, already caps at 4) is what
+// makes newly-confirmed years show up auto-checked there: this just needs
+// to navigate with every dataset_id confirmed this session in that param.
+function updateGoToDashboardCta() {
+  if (!confirmedThisSession.length) {
+    goToDashboardCta.style.display = 'none';
+    return;
+  }
+  goToDashboardCta.style.display = 'block';
+  document.getElementById('goToDashboardMsg').textContent =
+    `${confirmedThisSession.length} fiscal year${confirmedThisSession.length !== 1 ? 's' : ''} saved this session.`;
+
+  const navBtn = document.getElementById('navBackToDashboard');
+  if (navBtn) {
+    navBtn.onclick = goToDashboard;
   }
 }
 
-function cancelUpload() {
-  pendingBatchId = null;
-  selectedFiles = [];
-  confirmCard.style.display = 'none';
-  uploadBtn.style.display = 'block';
-  demoBtn.style.display = 'block';
-  confirmBtn.disabled = false;
-  renderFileList();
+function goToDashboard() {
+  const years = encodeURIComponent(confirmedThisSession.join(','));
+  window.location = confirmedThisSession.length ? `/dashboard?years=${years}` : '/dashboard';
 }
 
 async function loadDemo() {

@@ -1,12 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 
+{% block nav_actions %}
+<div class="file-drawer-wrap">
+  <button class="btn-outline-sm" id="fileDrawerBtn" onclick="toggleFileDrawer()" title="Upload history">📁</button>
+  <div class="file-drawer-panel" id="fileDrawerPanel" style="display:none;"></div>
+</div>
+<button class="btn-outline-sm" onclick="window.location='/upload-page'">↑ Upload New</button>
+{% endblock %}
+
 {% block head_extra %}
 <style>
 /* ── KPI Cards ──────────────────────────────────────────────────── */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1rem;
   margin-bottom: 2rem;
 }
@@ -44,20 +52,22 @@
   font-weight: 700;
   color: var(--text);
   line-height: 1.25;
+}
+/* 2+ checked years: one stacked row per year (swatch + label + value)
+   instead of the single big value above — always stacked regardless of
+   viewport width, driven by year count rather than a screen-size
+   breakpoint. */
+.kpi-year-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: .3rem;
+  align-items: center;
+  gap: .4rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
 }
-.kpi-multi-sep { color: var(--text-muted); font-weight: 400; }
-@media (max-width: 480px) {
-  .kpi-value {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: .15rem;
-  }
-  .kpi-multi-sep { display: none; }
-}
+.kpi-year-row .year-swatch { flex-shrink: 0; }
+.kpi-year-label { color: var(--text-muted); font-weight: 500; min-width: 2.2rem; }
+.kpi-year-value { color: var(--text); }
 .kpi-sub {
   font-size: .75rem;
   color: var(--text-muted);
@@ -283,10 +293,24 @@ tr:hover td { background: var(--hover-bg); }
   cursor: pointer;
   transition: border-color .15s;
 }
-.year-row.checked { border-color: var(--year-swatch, var(--gold)); }
+/* Checked rows fill with the year's assigned color instead of a small dot —
+   easier to tell years apart at a glance. Text color switches to whichever
+   of black/white contrasts better with that background (see
+   contrastTextColor()), since the fixed palette spans both light (gold)
+   and dark (maroon) colors. */
+.year-row.checked {
+  background: var(--year-swatch, var(--gold));
+  border-color: var(--year-swatch, var(--gold));
+  color: var(--year-text, var(--text));
+}
+.year-row.checked .year-row-meta { color: var(--year-text, var(--text-muted)); opacity: .85; }
 .year-row input[type="checkbox"] { cursor: pointer; }
 .year-row input[type="checkbox"]:disabled { cursor: not-allowed; }
-.year-row.disabled { opacity: .45; }
+/* Dim only when disabled AND unchecked (can't add more — at the 4-year
+   cap). A checked-but-disabled row (the sole remaining year, which must
+   stay selected) keeps full opacity — it reads as "locked in," not
+   "unavailable". */
+.year-row.disabled:not(.checked) { opacity: .45; }
 .year-swatch {
   width: 10px; height: 10px; border-radius: 50%;
   display: inline-block;
@@ -355,20 +379,81 @@ tr:hover td { background: var(--hover-bg); }
 }
 .val-item strong { color: var(--text); }
 .val-item span   { color: var(--text-muted); display: block; font-size: .7rem; }
+
+/* ── File drawer (upload history) ─────────────────────────────── */
+.file-drawer-wrap { position: relative; }
+.file-drawer-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 380px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 200;
+}
+.file-drawer-header {
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  padding: .85rem 1rem .6rem;
+  position: sticky; top: 0;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--card-border);
+}
+.file-drawer-group-label {
+  padding: .7rem 1rem .3rem;
+  font-size: .68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+.file-drawer-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: .8rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+.file-drawer-remove-btn:hover {
+  color: #e74c3c;
+  background: rgba(231,76,60,.15);
+}
+.file-drawer-row {
+  padding: .35rem 1rem;
+  font-size: .76rem;
+  color: var(--text);
+  overflow-wrap: break-word;
+}
+.file-drawer-empty {
+  padding: 1.5rem 1rem; text-align: center;
+  color: var(--text-muted); font-size: .8rem;
+}
 </style>
 {% endblock %}
 
 {% block content %}
 
-<!-- ── Source files info ───────────────────────────────────────────────── -->
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.5rem;">
-  <div>
-    <h2 style="font-size:1.2rem;font-weight:700;">Sales Analytics</h2>
-    <p style="color:var(--text-muted);font-size:.8rem;" id="period-label">Loading…</p>
-  </div>
-  <div style="font-size:.75rem;color:var(--text-muted);">
-    {% for f in source_files %}<span style="background:var(--gray-700);padding:3px 8px;border-radius:4px;margin-left:.4rem;">{{ f }}</span>{% endfor %}
-  </div>
+<!-- ── Page header ─────────────────────────────────────────────────────── -->
+<div style="margin-bottom:1.25rem;">
+  <h2 style="font-size:1.2rem;font-weight:700;">Sales Analytics</h2>
+  <p style="color:var(--text-muted);font-size:.8rem;" id="period-label">Loading…</p>
 </div>
 
 <!-- ── Compare Fiscal Years ──────────────────────────────────────────── -->
@@ -642,6 +727,19 @@ const MAX_YEARS = 4;
 const FISCAL_MONTHS = ['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'];
 const FISCAL_QUARTERS = ['FQ1','FQ2','FQ3','FQ4'];
 
+// Picks black or white text for a given hex background using a simplified
+// relative-luminance heuristic, so each year's solid-color row in Compare
+// Fiscal Years stays readable regardless of how bright/dark its assigned
+// palette color is (e.g. gold needs dark text, maroon needs light text).
+function contrastTextColor(hex) {
+  const c = hex.replace('#', '');
+  const r = parseInt(c.substr(0, 2), 16) / 255;
+  const g = parseInt(c.substr(2, 2), 16) / 255;
+  const b = parseInt(c.substr(4, 2), 16) / 255;
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 0.6 ? '#1a1a1a' : '#ffffff';
+}
+
 function assignYearColor(id) {
   if (yearColors[id] && !Object.entries(yearColors).some(([k, v]) => k !== id && v === yearColors[id] && checkedYearIds.includes(k))) {
     return yearColors[id];
@@ -686,6 +784,19 @@ function fmtDate(iso) {
   return iso ? iso.slice(0, 10) : '—';
 }
 
+// Display-only abbreviation for the KPI cards' year label ("FY2023-2024" ->
+// "FY23-24", "FY2026" -> "FY26") — the narrow card width wraps the full
+// 4-digit form onto a second line. Only used for that one label; the actual
+// dataset_id (keys, URLs, chart series names, legend, pickers) is untouched.
+// Falls back to the id as-is for anything that doesn't match the FYyyyy[-yyyy]
+// pattern (e.g. a user-edited custom label from the confirm step).
+function shortYearLabel(id) {
+  const m = String(id).match(/^FY(\d{4})(?:-(\d{4}))?$/i);
+  if (!m) return id;
+  const y1 = m[1].slice(2);
+  return m[2] ? `FY${y1}-${m[2].slice(2)}` : `FY${y1}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tab-local year selection — Operations heatmap, Bookings table, the
 // Discounts tab's top-discounted ranked table, and the Data Quality tab all
@@ -701,7 +812,8 @@ let bookingsYearId = null;
 let validationYearId = null;
 
 function reconcileTabYears() {
-  const fallback = checkedYearIds.length ? checkedYearIds[0] : null;
+  const sorted = getSortedCheckedYears(dataByYear);
+  const fallback = sorted.length ? sorted[0] : null;
   if (!checkedYearIds.includes(topHostsYearId))   topHostsYearId   = fallback;
   if (!checkedYearIds.includes(heatmapYearId))    heatmapYearId    = fallback;
   if (!checkedYearIds.includes(discTableYearId))  discTableYearId  = fallback;
@@ -712,7 +824,7 @@ function reconcileTabYears() {
 function populateYearPicker(selectId, currentValue) {
   const el = document.getElementById(selectId);
   if (!el) return;
-  el.innerHTML = checkedYearIds.map(id =>
+  el.innerHTML = getSortedCheckedYears(dataByYear).map(id =>
     `<option value="${id}" ${id === currentValue ? 'selected' : ''}>${id}</option>`
   ).join('');
 }
@@ -729,11 +841,35 @@ function renderYearLegend() {
     return;
   }
   el.style.display = 'flex';
-  el.innerHTML = checkedYearIds.map(id => `
+  el.innerHTML = getSortedCheckedYears(dataByYear).map(id => `
     <span style="display:inline-flex;align-items:center;gap:.4rem;">
       <span class="year-swatch" style="background:${yearColors[id] || '#999'}"></span>${id}
     </span>
   `).join('');
+}
+
+// Chronological year order, independent of check order. checkedYearIds is
+// maintained in check-order (needed for primaryYearId = "most recently
+// checked", a separate deliberate design decision this does NOT touch) —
+// but every render consumer (KPI row, legends, chart series, tab-local
+// picker option lists) should show years oldest-first regardless of the
+// order they were clicked. dataByYear's keys are always membership-
+// identical to checkedYearIds (onYearToggle keeps them in sync), so this is
+// a safe drop-in for iteration order everywhere except primaryYearId.
+function compareYearIds(a, b) {
+  function parseYear(id) {
+    const m = String(id).match(/\d+/);
+    return m ? parseInt(m[0], 10) : null;
+  }
+  const ya = parseYear(a), yb = parseYear(b);
+  if (ya === null && yb === null) return a.localeCompare(b);
+  if (ya === null) return 1;   // unparseable labels sort after numbered years
+  if (yb === null) return -1;
+  return ya - yb;
+}
+
+function getSortedCheckedYears(dataByYear) {
+  return Array.from(dataByYear.keys()).sort(compareYearIds);
 }
 
 // Union of a per-year label list (e.g. segment names), preserving first-seen
@@ -753,7 +889,7 @@ function unionLabels(getter) {
 // (0 if that year has no data for it, keeping the grouping intact rather
 // than distorting bar positions).
 function perYearBarDatasets(labels, getValue) {
-  return checkedYearIds.map(id => ({
+  return getSortedCheckedYears(dataByYear).map(id => ({
     label: id,
     data: labels.map(l => getValue(id, l)),
     backgroundColor: yearColors[id] || '#999',
@@ -763,18 +899,26 @@ function perYearBarDatasets(labels, getValue) {
 
 function renderYearCheckboxes(datasets) {
   allDatasets = datasets;
+  // /api/datasets returns upload-recency order (most-recently-uploaded
+  // first) — display order in this card should be chronological instead,
+  // regardless of which year was uploaded first or last.
+  const sortedDatasets = [...datasets].sort((a, b) => compareYearIds(a.id, b.id));
   const list = document.getElementById('yearRowList');
   const atCap = checkedYearIds.length >= MAX_YEARS;
 
-  list.innerHTML = datasets.map(d => {
+  const isLastChecked = checkedYearIds.length === 1;
+
+  list.innerHTML = sortedDatasets.map(d => {
     const checked = checkedYearIds.includes(d.id);
-    const disabled = !checked && atCap;
+    // Disabled if adding it would exceed the cap, OR it's the sole checked
+    // year (at least one must always stay selected).
+    const disabled = (!checked && atCap) || (checked && isLastChecked);
     const color = checked ? assignYearColor(d.id) : '';
+    const rowStyle = color ? `--year-swatch:${color};--year-text:${contrastTextColor(color)}` : '';
     return `
-      <label class="year-row ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}" style="${color ? `--year-swatch:${color}` : ''}">
+      <label class="year-row ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}" style="${rowStyle}">
         <input type="checkbox" data-id="${d.id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}
                onchange="onYearToggle('${d.id}', this.checked)"/>
-        <span class="year-swatch"></span>
         <span>${d.id}</span>
         <span class="year-row-meta">${d.rows.toLocaleString()} rows · ${fmtDate(d.uploaded_at)}</span>
       </label>
@@ -786,9 +930,9 @@ function renderYearCheckboxes(datasets) {
   // Compact multi-select shown below ~640px instead of the row list — same
   // underlying selection, kept in sync here so both widgets always agree.
   const multiSelect = document.getElementById('yearMultiSelect');
-  multiSelect.innerHTML = datasets.map(d => {
+  multiSelect.innerHTML = sortedDatasets.map(d => {
     const checked = checkedYearIds.includes(d.id);
-    const disabled = !checked && atCap;
+    const disabled = (!checked && atCap) || (checked && isLastChecked);
     return `<option value="${d.id}" ${checked ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${d.id} (${d.rows.toLocaleString()} rows, ${fmtDate(d.uploaded_at)})</option>`;
   }).join('');
 }
@@ -820,6 +964,16 @@ async function onYearToggle(id, checked) {
     checkedYearIds = checkedYearIds.filter(x => x !== id).concat(id);
     primaryYearId = id;
   } else {
+    // At least one fiscal year must always stay selected — no blank/empty
+    // dashboard state reachable via unchecking. The checkbox for the sole
+    // remaining checked year is also disabled (see renderYearCheckboxes)
+    // so this normally can't even be attempted; this is the defensive
+    // backstop for that invariant.
+    if (checkedYearIds.length <= 1) {
+      showToast('At least one fiscal year must stay selected.', 'error');
+      renderYearCheckboxes(allDatasets); // revert any stray visual state (e.g. multi-select)
+      return;
+    }
     checkedYearIds = checkedYearIds.filter(x => x !== id);
     dataByYear.delete(id);
     if (primaryYearId === id) {
@@ -967,6 +1121,104 @@ function switchTab(name) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// File drawer — compact, view-only upload-history panel. Lists every
+// dataset ever uploaded (not just the ones currently checked in Compare
+// Fiscal Years), reusing allDatasets so no extra fetch is needed. Shown in
+// chronological (increasing year) order via the same compareYearIds()
+// comparator the Compare Fiscal Years card uses, not upload-recency order.
+// ─────────────────────────────────────────────────────────────────────────────
+function renderFileDrawer() {
+  const panel = document.getElementById('fileDrawerPanel');
+  if (!allDatasets.length) {
+    panel.innerHTML = '<div class="file-drawer-header">Upload History</div><div class="file-drawer-empty">No uploads yet.</div>';
+    return;
+  }
+  const sortedDatasets = [...allDatasets].sort((a, b) => compareYearIds(a.id, b.id));
+  const groups = sortedDatasets.map(d => {
+    const files = (d.source_files || []).map(name => `<div class="file-drawer-row">${name}</div>`).join('');
+    return `
+      <div class="file-drawer-group-label">
+        <span>${d.id}</span>
+        <button type="button" class="file-drawer-remove-btn" title="Remove ${d.id}" onclick="removeDataset('${d.id}')">✕ Remove</button>
+      </div>
+      ${files}`;
+  }).join('');
+  panel.innerHTML = `<div class="file-drawer-header">Upload History</div>${groups}`;
+}
+
+// Permanently deletes one uploaded fiscal year (POST /upload/clear) and
+// reconciles all client-side state that referenced it: allDatasets,
+// checkedYearIds, dataByYear, and the URL. If the removed year was the sole
+// checked one, falls back to the most-recently-uploaded remaining dataset
+// (same default initDashboard() uses on first load). If it was the last
+// dataset left entirely, there's nothing left to show on this page, so this
+// sends the user to upload instead of rendering a never-built empty state.
+async function removeDataset(id) {
+  if (!confirm(`Remove ${id}? This permanently deletes its uploaded data — you'll need to re-upload the source files to get it back.`)) {
+    return;
+  }
+
+  showLoading('Removing ' + id + '…');
+  try {
+    const res = await fetch('/upload/clear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'dataset_id=' + encodeURIComponent(id),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to remove dataset');
+
+    allDatasets = allDatasets.filter(d => d.id !== id);
+    checkedYearIds = checkedYearIds.filter(x => x !== id);
+    dataByYear.delete(id);
+
+    if (!allDatasets.length) {
+      window.location = '/upload-page';
+      return;
+    }
+
+    if (!checkedYearIds.length) {
+      checkedYearIds = [allDatasets[0].id];
+    }
+    if (primaryYearId === id) {
+      primaryYearId = checkedYearIds[checkedYearIds.length - 1];
+    }
+
+    writeYearsToUrl(checkedYearIds);
+    renderYearCheckboxes(allDatasets);
+    renderFileDrawer();
+    reconcileTabYears();
+
+    await fetchYears(checkedYearIds);
+    hideLoading();
+    renderAll(dataByYear, yearColors);
+    showToast(`${id} removed.`, 'success');
+  } catch (e) {
+    hideLoading();
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+function toggleFileDrawer(forceClose) {
+  const panel = document.getElementById('fileDrawerPanel');
+  const isOpen = panel.style.display !== 'none';
+  if (forceClose || isOpen) {
+    panel.style.display = 'none';
+    return;
+  }
+  renderFileDrawer();
+  panel.style.display = 'block';
+}
+
+document.addEventListener('click', (e) => {
+  const wrap = document.querySelector('.file-drawer-wrap');
+  if (wrap && !wrap.contains(e.target)) toggleFileDrawer(true);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') toggleFileDrawer(true);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Top-level render dispatcher — replaces renderAllPanels(d). Resolves the
 // primary (most-recently-checked) year's payload out of dataByYear and runs
 // the same per-panel dispatch as before; visually identical to today when
@@ -996,7 +1248,16 @@ function renderAll(dataByYear, yearColors) {
     return;
   }
 
-  document.getElementById('period-label').textContent = 'Reporting period: ' + (d.reporting_period || '');
+  // Reporting period only means one specific date range for one specific
+  // year — shown when exactly one year is checked, hidden once 2+ years
+  // are being compared rather than showing just the primary year's period.
+  const periodLabelEl = document.getElementById('period-label');
+  if (checkedYearIds.length === 1) {
+    periodLabelEl.style.display = '';
+    periodLabelEl.textContent = 'Reporting period: ' + (d.reporting_period || '');
+  } else {
+    periodLabelEl.style.display = 'none';
+  }
 
   panels.summary.data = { kpis: d.kpis, validation: d.validation };
   panels.summary.datasetId = primaryYearId;
@@ -1051,12 +1312,14 @@ function renderAll(dataByYear, yearColors) {
 // ─────────────────────────────────────────────────────────────────────────────
 // KPIs (summary panel — no charts, plain text nodes)
 // ─────────────────────────────────────────────────────────────────────────────
-// One compact, color-coded value per checked year (e.g. "$1.2M · $1.4M"),
-// not a chart. Sub-text (discount rate, paid/internal split, etc.) stays
+// One value per checked year, not a chart. Exactly one year checked: plain
+// unstyled value, byte-identical to the pre-multi-year look. 2+ years:
+// one stacked row per year (color swatch + year label + value), oldest
+// year first. Sub-text (discount rate, paid/internal split, etc.) stays
 // primary-year-only — cramming per-year secondary metrics into these small
 // lines would be unreadable.
 function renderKPIs() {
-  const ids = checkedYearIds;
+  const ids = getSortedCheckedYears(dataByYear);
   if (!ids.length) {
     ['k-gross','k-net','k-discount','k-events','k-hosts','k-avg','k-hours','k-monthly'].forEach(id => {
       document.getElementById(id).textContent = '—';
@@ -1067,15 +1330,23 @@ function renderKPIs() {
     return;
   }
 
-  // Separator is its own element (not text glued between spans) so CSS can
-  // hide it when .kpi-value switches to a vertical stack below ~480px.
   function multiValue(fmtFn, extract) {
+    if (ids.length === 1) {
+      const k = (dataByYear.get(ids[0]) || {}).kpis;
+      return fmtFn(k ? extract(k) : null);
+    }
     return ids.map(id => {
       const k = (dataByYear.get(id) || {}).kpis;
       const val = k ? extract(k) : null;
-      const color = yearColors[id] || 'inherit';
-      return `<span style="color:${color}">${fmtFn(val)}</span>`;
-    }).join('<span class="kpi-multi-sep"> · </span>');
+      const color = yearColors[id] || '#999';
+      return `
+        <div class="kpi-year-row">
+          <span class="year-swatch" style="background:${color}"></span>
+          <span class="kpi-year-label">${shortYearLabel(id)}</span>
+          <span class="kpi-year-value">${fmtFn(val)}</span>
+        </div>
+      `;
+    }).join('');
   }
 
   document.getElementById('k-gross').innerHTML    = multiValue(fmt$, k => k.total_gross_sales);
@@ -1189,7 +1460,7 @@ function renderMonthlyRevenue(panel) {
     return;
   }
 
-  const datasets = checkedYearIds.map(id => {
+  const datasets = getSortedCheckedYears(dataByYear).map(id => {
     const d = (dataByYear.get(id) || {}).monthly_revenue;
     if (!d || !d.labels) return null;
     const byMonth = {};
@@ -1258,7 +1529,7 @@ function renderQuarterly(panel) {
     return;
   }
 
-  const datasets = checkedYearIds.map(id => {
+  const datasets = getSortedCheckedYears(dataByYear).map(id => {
     const d = (dataByYear.get(id) || {}).quarterly_summary;
     if (!d || !d.labels) return null;
     const byQuarter = {};
@@ -1325,7 +1596,7 @@ function renderVolume(panel) {
     return;
   }
 
-  const datasets = checkedYearIds.map(id => {
+  const datasets = getSortedCheckedYears(dataByYear).map(id => {
     const d = (dataByYear.get(id) || {}).monthly_volume;
     if (!d || !d.labels) return null;
     const byMonth = {};
@@ -1427,7 +1698,7 @@ function renderSegment(panel) {
 }
 
 function renderSegmentGroupedBar(panel, canvasId, labels, metric) {
-  const datasets = checkedYearIds.map(id => {
+  const datasets = getSortedCheckedYears(dataByYear).map(id => {
     const sa = (dataByYear.get(id) || {}).segment_analysis;
     const byLabel = {};
     if (sa && sa.labels) sa.labels.forEach((l, i) => { byLabel[l] = sa[metric][i]; });
@@ -1669,7 +1940,7 @@ function renderWeekday(panel) {
     return;
   }
 
-  const first = (dataByYear.get(checkedYearIds[0]) || {}).weekday_summary;
+  const first = (dataByYear.get(getSortedCheckedYears(dataByYear)[0]) || {}).weekday_summary;
   if (!first || !first.labels) return;
   const labels = first.labels.map(l => l.slice(0,3));
 
@@ -1723,7 +1994,7 @@ function renderDuration(panel) {
     return;
   }
 
-  const first = (dataByYear.get(checkedYearIds[0]) || {}).duration_dist;
+  const first = (dataByYear.get(getSortedCheckedYears(dataByYear)[0]) || {}).duration_dist;
   if (!first || !first.labels) return;
 
   const datasets = perYearBarDatasets(first.labels, (id, l) => {
