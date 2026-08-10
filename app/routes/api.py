@@ -4,7 +4,9 @@ Every route resolves a dataset_id (query param `ds`, falling back to the
 most-recently-uploaded dataset) and requires that dataset to exist.
 """
 import math
-from flask import Blueprint, jsonify, request, current_app
+from io import BytesIO
+
+from flask import Blueprint, jsonify, request, current_app, send_file
 from app.models.store import (
     get_dataset,
     dataset_exists,
@@ -13,6 +15,7 @@ from app.models.store import (
     get_dashboard_cache,
     set_dashboard_cache,
 )
+from app.utils.exporter import build_export_workbook
 from app.utils.analytics import (
     build_full_dashboard,
     compute_kpis,
@@ -304,6 +307,26 @@ def api_bookings():
         }
 
     return _cached_json(ds, _compute)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Excel export (Net + Gross sheets, each with Client Type merged in)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_bp.route("/export")
+def api_export():
+    ds, err = _require_dataset(_resolve_ds())
+    if err: return err
+
+    xlsx_bytes = build_export_workbook(ds["bookings"])
+    filename = f"EMS_Export_{ds['id']}.xlsx"
+
+    return send_file(
+        BytesIO(xlsx_bytes),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=filename,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

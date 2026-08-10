@@ -6,6 +6,7 @@
   <button class="btn-outline-sm" id="fileDrawerBtn" onclick="toggleFileDrawer()" title="Upload history">📁</button>
   <div class="file-drawer-panel" id="fileDrawerPanel" style="display:none;"></div>
 </div>
+<button class="btn-outline-sm" id="exportBtn" onclick="exportWorkbook()" title="Download Net + Gross as one Excel file">⬇ Export</button>
 <button class="btn-outline-sm" onclick="window.location='/upload-page'">↑ Upload New</button>
 {% endblock %}
 
@@ -764,6 +765,40 @@ function writeYearsToUrl(ids) {
 
 function getActiveDatasetId() {
   return primaryYearId;
+}
+
+// ── Export (Net + Gross workbook, Client Type merged in) ───────────────────
+async function exportWorkbook() {
+  const id = getActiveDatasetId();
+  if (!id) {
+    showToast('No dataset loaded yet — upload files first.', 'warning');
+    return;
+  }
+  const btn = document.getElementById('exportBtn');
+  if (btn) btn.disabled = true;
+  showLoading('Building export…');
+  try {
+    const res = await fetch('/api/export?ds=' + encodeURIComponent(id));
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || ('Export failed (' + res.status + ')'));
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `EMS_Export_${id}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    showToast('Export downloaded.', 'success');
+  } catch (e) {
+    showToast(e.message || 'Export failed.', 'error');
+  } finally {
+    hideLoading();
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function fetchYears(ids) {
