@@ -11,6 +11,12 @@ env/
 data/**/*.xlsx
 data/**/*.xls
 data/**/*.csv
+# Synthetic demo dataset ships with the repo so the "Load Demo Data" button
+# works out of the box on a fresh clone (contains fictional hosts/values only).
+!data/demo/
+!data/demo/*.xlsx
+!data/demo/*.xls
+!data/demo/*.csv
 *.log
 .DS_Store
 instance/
